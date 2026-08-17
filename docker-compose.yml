@@ -1,0 +1,31 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: deployops-postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: deployops
+      POSTGRES_USER: deployops
+      POSTGRES_PASSWORD: deployops
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - deployops_postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: deployops-redis
+    restart: unless-stopped
+
+    ports:
+      - "6379:6379"
+
+    volumes:
+      - deployops_redis_data:/data
+
+volumes:
+  deployops_postgres_data:
+  deployops_redis_data:
