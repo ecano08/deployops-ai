@@ -1,8 +1,12 @@
 import type {
+  AiProposedActionListResponse,
   AuthResponse,
   CopilotResponse,
   CustomerListResponse,
   DeploymentListResponse,
+  EvaluationDatasetListResponse,
+  EvaluationRunListResponse,
+  EvaluationRunResponse,
   IntegrationListResponse,
   IntegrationTestResponse,
   UserResponse,
@@ -148,5 +152,71 @@ export function askCopilot(
       method: 'POST',
       body: JSON.stringify({ message }),
     },
+  )
+}
+
+export function fetchEvaluationDatasets(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+) {
+  return request<EvaluationDatasetListResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/evaluation-datasets`,
+  )
+}
+
+export function fetchEvaluationRuns(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+) {
+  return request<EvaluationRunListResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/evaluation-runs`,
+  )
+}
+
+export function runEvaluationDataset(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+  datasetId: number,
+) {
+  return request<EvaluationRunResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/evaluation-datasets/${datasetId}/runs`,
+    { method: 'POST' },
+  )
+}
+
+export function fetchPendingAiActions(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+) {
+  return request<AiProposedActionListResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/ai-actions/pending`,
+  )
+}
+
+export function approveAiAction(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+  actionId: number,
+) {
+  return request<AiProposedActionListResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/ai-actions/${actionId}/approve`,
+    { method: 'POST' },
+  )
+}
+
+export function rejectAiAction(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+  actionId: number,
+) {
+  return request<AiProposedActionListResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/ai-actions/${actionId}/reject`,
+    { method: 'POST' },
   )
 }

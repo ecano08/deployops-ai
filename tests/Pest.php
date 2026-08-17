@@ -85,6 +85,21 @@ function copilotPath(Workspace $workspace, Customer $customer, Deployment $deplo
     return '/api/workspaces/'.$workspace->id.'/customers/'.$customer->id.'/deployments/'.$deployment->id.'/copilot';
 }
 
+function evaluationDatasetsPath(Workspace $workspace, Customer $customer, Deployment $deployment): string
+{
+    return '/api/workspaces/'.$workspace->id.'/customers/'.$customer->id.'/deployments/'.$deployment->id.'/evaluation-datasets';
+}
+
+function evaluationRunsPath(Workspace $workspace, Customer $customer, Deployment $deployment): string
+{
+    return '/api/workspaces/'.$workspace->id.'/customers/'.$customer->id.'/deployments/'.$deployment->id.'/evaluation-runs';
+}
+
+function aiActionsPath(Workspace $workspace, Customer $customer, Deployment $deployment): string
+{
+    return '/api/workspaces/'.$workspace->id.'/customers/'.$customer->id.'/deployments/'.$deployment->id.'/ai-actions';
+}
+
 function openAiToolCallResponse(string $name, string $arguments = '{}', string $responseId = 'resp_tool'): array
 {
     return [

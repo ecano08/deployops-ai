@@ -269,7 +269,7 @@ it('sends store false on every openai responses request', function () {
 it('defines strict json schemas for all copilot tools', function () {
     $definitions = app(CopilotToolExecutor::class)->definitions();
 
-    expect($definitions)->toHaveCount(6);
+    expect($definitions)->toHaveCount(7);
 
     foreach ($definitions as $definition) {
         expect($definition['strict'] ?? null)->toBeTrue()

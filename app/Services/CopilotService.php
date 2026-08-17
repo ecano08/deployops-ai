@@ -22,8 +22,36 @@ class CopilotService
      */
     public function ask(CopilotContext $context, string $question): array
     {
+        $telemetry = $this->askWithTelemetry($context, $question, persistLog: true);
+
+        if ($telemetry['error'] !== null) {
+            throw new CopilotException(
+                $telemetry['error'],
+                $telemetry['status_code'] ?? 502,
+            );
+        }
+
+        return [
+            'answer' => $telemetry['answer'] ?? '',
+            'tools_used' => $telemetry['tools_used'],
+        ];
+    }
+
+    /**
+     * @return array{
+     *   answer: string|null,
+     *   tools_used: array<int, string>,
+     *   sources_used: array<int, string>,
+     *   latency_ms: int,
+     *   error: string|null,
+     *   status_code: int|null
+     * }
+     */
+    public function askWithTelemetry(CopilotContext $context, string $question, bool $persistLog = true): array
+    {
         $startedAt = hrtime(true);
         $toolsUsed = [];
+        $sourcesUsed = [];
         $model = (string) config('services.openai.model');
 
         try {
@@ -45,11 +73,19 @@ class CopilotService
                         throw new CopilotException('The AI service returned an empty response.', 502);
                     }
 
-                    $this->logRequest($context, $question, $model, $toolsUsed, $startedAt, 'success', null);
+                    $latencyMs = $this->latencyMs($startedAt);
+
+                    if ($persistLog) {
+                        $this->logRequest($context, $question, $model, $toolsUsed, $startedAt, 'success', null);
+                    }
 
                     return [
                         'answer' => $answer,
                         'tools_used' => array_values(array_unique($toolsUsed)),
+                        'sources_used' => array_values(array_unique($sourcesUsed)),
+                        'latency_ms' => $latencyMs,
+                        'error' => null,
+                        'status_code' => null,
                     ];
                 }
 
@@ -76,6 +112,8 @@ class CopilotService
                         ];
                     }
 
+                    $sourcesUsed = array_merge($sourcesUsed, $this->extractSourcesFromToolResult($call['name'], $result));
+
                     $toolOutputs[] = [
                         'type' => 'function_call_output',
                         'call_id' => $call['call_id'],
@@ -88,13 +126,31 @@ class CopilotService
 
             throw new CopilotException('The copilot exceeded the maximum number of tool calls.', 502);
         } catch (CopilotException $exception) {
-            $this->logRequest($context, $question, $model, $toolsUsed, $startedAt, 'failure', $exception->getMessage());
+            if ($persistLog) {
+                $this->logRequest($context, $question, $model, $toolsUsed, $startedAt, 'failure', $exception->getMessage());
+            }
 
-            throw $exception;
+            return [
+                'answer' => null,
+                'tools_used' => array_values(array_unique($toolsUsed)),
+                'sources_used' => array_values(array_unique($sourcesUsed)),
+                'latency_ms' => $this->latencyMs($startedAt),
+                'error' => $exception->getMessage(),
+                'status_code' => $exception->statusCode,
+            ];
         } catch (\Throwable $exception) {
-            $this->logRequest($context, $question, $model, $toolsUsed, $startedAt, 'failure', 'An unexpected copilot error occurred.');
+            if ($persistLog) {
+                $this->logRequest($context, $question, $model, $toolsUsed, $startedAt, 'failure', 'An unexpected copilot error occurred.');
+            }
 
-            throw new CopilotException('An unexpected copilot error occurred.', 503);
+            return [
+                'answer' => null,
+                'tools_used' => array_values(array_unique($toolsUsed)),
+                'sources_used' => array_values(array_unique($sourcesUsed)),
+                'latency_ms' => $this->latencyMs($startedAt),
+                'error' => 'An unexpected copilot error occurred.',
+                'status_code' => 503,
+            ];
         }
     }
 
@@ -109,11 +165,39 @@ class CopilotService
             'If search_knowledge returns no relevant results, say you do not have that information in the knowledge base. '.
             'Never invent deployment, customer, integration, or documentation details. '.
             'Only reference integration IDs returned by list_deployment_integrations. '.
+            'To change deployment stage, use propose_update_deployment_stage which creates a pending action for human approval. '.
+            'Never claim a deployment stage was changed unless an action was proposed and approved. '.
             'Do not request or expose secrets such as API keys or webhook secrets.',
             $context->workspace->name,
             $context->customer->name,
             $context->deployment->name,
         );
+    }
+
+    /**
+     * @param  array<string, mixed>  $result
+     * @return array<int, string>
+     */
+    private function extractSourcesFromToolResult(string $toolName, array $result): array
+    {
+        if ($toolName !== 'search_knowledge' || ! isset($result['results']) || ! is_array($result['results'])) {
+            return [];
+        }
+
+        $sources = [];
+
+        foreach ($result['results'] as $item) {
+            if (is_array($item) && isset($item['source_filename']) && is_string($item['source_filename'])) {
+                $sources[] = $item['source_filename'];
+            }
+        }
+
+        return $sources;
+    }
+
+    private function latencyMs(int $startedAt): int
+    {
+        return (int) round((hrtime(true) - $startedAt) / 1_000_000);
     }
 
     /**

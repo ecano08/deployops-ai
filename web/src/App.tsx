@@ -1,22 +1,37 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import {
+  approveAiAction,
   askCopilot,
   clearToken,
   createWorkspace,
   fetchCurrentUser,
   fetchCustomers,
   fetchDeployments,
+  fetchEvaluationDatasets,
+  fetchEvaluationRuns,
   fetchIntegrations,
+  fetchPendingAiActions,
   fetchWorkspaceMembers,
   fetchWorkspaces,
   getToken,
   login,
   logout,
   register,
+  rejectAiAction,
+  runEvaluationDataset,
   testIntegration,
   setToken,
 } from './api'
-import type { Customer, Deployment, DeploymentIntegration, User, Workspace, WorkspaceMember } from './types'
+import type {
+  AiProposedAction,
+  Customer,
+  Deployment,
+  DeploymentIntegration,
+  EvaluationRun,
+  User,
+  Workspace,
+  WorkspaceMember,
+} from './types'
 import { DEPLOYMENT_STAGES } from './types'
 
 type HealthResponse = {
@@ -54,6 +69,15 @@ function App() {
   const [copilotToolsUsed, setCopilotToolsUsed] = useState<string[]>([])
   const [copilotError, setCopilotError] = useState<string | null>(null)
   const [copilotLoading, setCopilotLoading] = useState(false)
+  const [evaluationRuns, setEvaluationRuns] = useState<EvaluationRun[]>([])
+  const [evaluationRunsError, setEvaluationRunsError] = useState<string | null>(null)
+  const [evaluationRunsLoading, setEvaluationRunsLoading] = useState(false)
+  const [evaluationDatasetId, setEvaluationDatasetId] = useState<number | null>(null)
+  const [evaluationRunMessage, setEvaluationRunMessage] = useState<string | null>(null)
+  const [pendingAiActions, setPendingAiActions] = useState<AiProposedAction[]>([])
+  const [pendingAiActionsError, setPendingAiActionsError] = useState<string | null>(null)
+  const [pendingAiActionsLoading, setPendingAiActionsLoading] = useState(false)
+  const [aiActionMessage, setAiActionMessage] = useState<string | null>(null)
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -231,6 +255,47 @@ function App() {
     }
   }, [user, selectedWorkspaceId, selectedCustomerId, selectedDeploymentId])
 
+  useEffect(() => {
+    if (!user || selectedWorkspaceId === null || selectedCustomerId === null || selectedDeploymentId === null) {
+      return
+    }
+
+    let cancelled = false
+
+    Promise.all([
+      fetchEvaluationRuns(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId),
+      fetchEvaluationDatasets(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId),
+      fetchPendingAiActions(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId),
+    ])
+      .then(([runsResponse, datasetsResponse, actionsResponse]) => {
+        if (!cancelled) {
+          setEvaluationRuns(runsResponse.data)
+          setEvaluationRunsError(null)
+          setEvaluationDatasetId(datasetsResponse.data[0]?.id ?? null)
+          setPendingAiActions(actionsResponse.data)
+          setPendingAiActionsError(null)
+        }
+      })
+      .catch((error: Error) => {
+        if (!cancelled) {
+          setEvaluationRuns([])
+          setEvaluationRunsError(error.message)
+          setPendingAiActions([])
+          setPendingAiActionsError(error.message)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setEvaluationRunsLoading(false)
+          setPendingAiActionsLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [user, selectedWorkspaceId, selectedCustomerId, selectedDeploymentId])
+
   function selectWorkspace(workspaceId: number) {
     setSelectedWorkspaceId(workspaceId)
     setSelectedCustomerId(null)
@@ -253,6 +318,15 @@ function App() {
     setCopilotToolsUsed([])
     setCopilotError(null)
     setCopilotLoading(false)
+    setEvaluationRuns([])
+    setEvaluationRunsError(null)
+    setEvaluationRunsLoading(false)
+    setEvaluationDatasetId(null)
+    setEvaluationRunMessage(null)
+    setPendingAiActions([])
+    setPendingAiActionsError(null)
+    setPendingAiActionsLoading(false)
+    setAiActionMessage(null)
   }
 
   function selectCustomer(customerId: number) {
@@ -270,6 +344,15 @@ function App() {
     setCopilotToolsUsed([])
     setCopilotError(null)
     setCopilotLoading(false)
+    setEvaluationRuns([])
+    setEvaluationRunsError(null)
+    setEvaluationRunsLoading(false)
+    setEvaluationDatasetId(null)
+    setEvaluationRunMessage(null)
+    setPendingAiActions([])
+    setPendingAiActionsError(null)
+    setPendingAiActionsLoading(false)
+    setAiActionMessage(null)
   }
 
   function selectDeployment(deploymentId: number) {
@@ -283,6 +366,88 @@ function App() {
     setCopilotToolsUsed([])
     setCopilotError(null)
     setCopilotLoading(false)
+    setEvaluationRuns([])
+    setEvaluationRunsError(null)
+    setEvaluationRunsLoading(true)
+    setEvaluationDatasetId(null)
+    setEvaluationRunMessage(null)
+    setPendingAiActions([])
+    setPendingAiActionsError(null)
+    setPendingAiActionsLoading(true)
+    setAiActionMessage(null)
+  }
+
+  async function handleRunEvaluation() {
+    if (
+      selectedWorkspaceId === null ||
+      selectedCustomerId === null ||
+      selectedDeploymentId === null ||
+      evaluationDatasetId === null
+    ) {
+      return
+    }
+
+    setEvaluationRunMessage(null)
+
+    try {
+      const response = await runEvaluationDataset(
+        selectedWorkspaceId,
+        selectedCustomerId,
+        selectedDeploymentId,
+        evaluationDatasetId,
+      )
+      setEvaluationRuns((current) => [response.data, ...current])
+      setEvaluationRunMessage(
+        `Evaluation completed: ${response.data.metrics.passed_cases}/${response.data.metrics.total_cases} passed.`,
+      )
+    } catch (error) {
+      setEvaluationRunMessage(error instanceof Error ? error.message : 'Evaluation run failed.')
+    }
+  }
+
+  async function refreshPendingAiActions() {
+    if (selectedWorkspaceId === null || selectedCustomerId === null || selectedDeploymentId === null) {
+      return
+    }
+
+    const response = await fetchPendingAiActions(
+      selectedWorkspaceId,
+      selectedCustomerId,
+      selectedDeploymentId,
+    )
+    setPendingAiActions(response.data)
+  }
+
+  async function handleApproveAiAction(actionId: number) {
+    if (selectedWorkspaceId === null || selectedCustomerId === null || selectedDeploymentId === null) {
+      return
+    }
+
+    setAiActionMessage(null)
+
+    try {
+      await approveAiAction(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId, actionId)
+      await refreshPendingAiActions()
+      setAiActionMessage('Action approved and executed.')
+    } catch (error) {
+      setAiActionMessage(error instanceof Error ? error.message : 'Could not approve action.')
+    }
+  }
+
+  async function handleRejectAiAction(actionId: number) {
+    if (selectedWorkspaceId === null || selectedCustomerId === null || selectedDeploymentId === null) {
+      return
+    }
+
+    setAiActionMessage(null)
+
+    try {
+      await rejectAiAction(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId, actionId)
+      await refreshPendingAiActions()
+      setAiActionMessage('Action rejected.')
+    } catch (error) {
+      setAiActionMessage(error instanceof Error ? error.message : 'Could not reject action.')
+    }
   }
 
   async function handleAskCopilot(event: FormEvent<HTMLFormElement>) {
@@ -398,6 +563,15 @@ function App() {
     setCopilotToolsUsed([])
     setCopilotError(null)
     setCopilotLoading(false)
+    setEvaluationRuns([])
+    setEvaluationRunsError(null)
+    setEvaluationRunsLoading(false)
+    setEvaluationDatasetId(null)
+    setEvaluationRunMessage(null)
+    setPendingAiActions([])
+    setPendingAiActionsError(null)
+    setPendingAiActionsLoading(false)
+    setAiActionMessage(null)
   }
 
   async function handleCreateWorkspace(event: FormEvent<HTMLFormElement>) {
@@ -681,6 +855,70 @@ function App() {
                               ))}
                             </ul>
                           </div>
+                        )}
+                      </section>
+
+                      <section>
+                        <h3>AI Evaluations — {selectedDeployment.name}</h3>
+                        {evaluationRunsLoading && <p>Loading evaluation results...</p>}
+                        {evaluationRunsError && <p>{evaluationRunsError}</p>}
+                        {evaluationDatasetId !== null && (
+                          <p>
+                            <button type="button" onClick={handleRunEvaluation}>
+                              Run evaluation dataset
+                            </button>
+                          </p>
+                        )}
+                        {evaluationRunMessage && <p>{evaluationRunMessage}</p>}
+                        {!evaluationRunsLoading && evaluationRuns.length === 0 && !evaluationRunsError && (
+                          <p>No evaluation runs yet.</p>
+                        )}
+                        {!evaluationRunsLoading && evaluationRuns.length > 0 && (
+                          <ul>
+                            {evaluationRuns.map((run) => (
+                              <li key={run.id}>
+                                Run #{run.id} — {run.status} — pass rate{' '}
+                                {Math.round((run.metrics.pass_rate ?? 0) * 100)}% — avg latency{' '}
+                                {run.metrics.average_latency_ms}ms
+                                {run.results && run.results.length > 0 && (
+                                  <ul>
+                                    {run.results.map((result) => (
+                                      <li key={result.id}>
+                                        Case #{result.evaluation_case_id}:{' '}
+                                        {result.passed ? 'passed' : 'failed'} ({result.latency_ms}ms)
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </section>
+
+                      <section>
+                        <h3>Pending AI Actions — {selectedDeployment.name}</h3>
+                        {pendingAiActionsLoading && <p>Loading pending actions...</p>}
+                        {pendingAiActionsError && <p>{pendingAiActionsError}</p>}
+                        {aiActionMessage && <p>{aiActionMessage}</p>}
+                        {!pendingAiActionsLoading &&
+                          pendingAiActions.length === 0 &&
+                          !pendingAiActionsError && <p>No pending actions.</p>}
+                        {!pendingAiActionsLoading && pendingAiActions.length > 0 && (
+                          <ul>
+                            {pendingAiActions.map((action) => (
+                              <li key={action.id}>
+                                {action.action_type} — {JSON.stringify(action.payload)} — requested by user{' '}
+                                {action.requested_by}
+                                <button type="button" onClick={() => handleApproveAiAction(action.id)}>
+                                  Approve
+                                </button>
+                                <button type="button" onClick={() => handleRejectAiAction(action.id)}>
+                                  Reject
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
                         )}
                       </section>
                     </section>

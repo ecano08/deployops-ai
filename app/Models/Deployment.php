@@ -67,4 +67,20 @@ class Deployment extends Model
     {
         return $this->hasMany(KnowledgeDocument::class);
     }
+
+    /**
+     * @return HasMany<EvaluationDataset, $this>
+     */
+    public function evaluationDatasets(): HasMany
+    {
+        return $this->hasMany(EvaluationDataset::class);
+    }
+
+    /**
+     * @return HasMany<AiProposedAction, $this>
+     */
+    public function aiProposedActions(): HasMany
+    {
+        return $this->hasMany(AiProposedAction::class);
+    }
 }

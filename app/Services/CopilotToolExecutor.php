@@ -2,17 +2,23 @@
 
 namespace App\Services;
 
+use App\Enums\AiActionType;
+use App\Enums\DeploymentStage;
 use App\Http\Resources\CustomerResource;
 use App\Http\Resources\DeploymentIntegrationResource;
 use App\Http\Resources\DeploymentResource;
 use App\Http\Resources\IntegrationActivityResource;
+use App\Models\AiProposedAction;
 use App\Models\DeploymentIntegration;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\Gate;
 
 class CopilotToolExecutor
 {
-    public function __construct(private KnowledgeSearchService $knowledgeSearch) {}
+    public function __construct(
+        private KnowledgeSearchService $knowledgeSearch,
+        private AiActionService $aiActionService,
+    ) {}
 
     /**
      * @return array<int, array<string, mixed>>
@@ -41,6 +47,7 @@ class CopilotToolExecutor
                 'List recent activity log entries for an integration in the current deployment.',
             ),
             $this->searchKnowledgeTool(),
+            $this->proposeUpdateDeploymentStageTool(),
         ];
     }
 
@@ -67,6 +74,7 @@ class CopilotToolExecutor
             'get_customer', 'get_deployment', 'list_deployment_integrations' => [],
             'get_integration_status', 'list_integration_activities' => ['integration_id'],
             'search_knowledge' => ['query', 'top_k'],
+            'propose_update_deployment_stage' => ['stage'],
             default => null,
         };
 
@@ -90,6 +98,10 @@ class CopilotToolExecutor
 
         if ($name === 'search_knowledge') {
             return $this->validateSearchKnowledgeArguments($arguments);
+        }
+
+        if ($name === 'propose_update_deployment_stage') {
+            return $this->validateProposeUpdateDeploymentStageArguments($arguments);
         }
 
         if (! array_key_exists('integration_id', $arguments)) {
@@ -217,6 +229,7 @@ class CopilotToolExecutor
             'get_integration_status' => $this->getIntegrationStatus($context, $arguments),
             'list_integration_activities' => $this->listIntegrationActivities($context, $arguments),
             'search_knowledge' => $this->searchKnowledge($context, $arguments),
+            'propose_update_deployment_stage' => $this->proposeUpdateDeploymentStage($context, $arguments),
             default => [
                 'error' => 'Unknown tool.',
             ],
@@ -330,6 +343,70 @@ class CopilotToolExecutor
                 ],
                 $results,
             ),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function proposeUpdateDeploymentStageTool(): array
+    {
+        return [
+            'type' => 'function',
+            'name' => 'propose_update_deployment_stage',
+            'description' => 'Propose changing the deployment stage. Creates a pending action that requires owner or admin approval before execution.',
+            'strict' => true,
+            'parameters' => [
+                'type' => 'object',
+                'properties' => [
+                    'stage' => [
+                        'type' => 'string',
+                        'enum' => DeploymentStage::values(),
+                        'description' => 'Target deployment stage.',
+                    ],
+                ],
+                'required' => ['stage'],
+                'additionalProperties' => false,
+            ],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $arguments
+     * @return array<string, mixed>|null
+     */
+    private function validateProposeUpdateDeploymentStageArguments(array $arguments): ?array
+    {
+        if (! array_key_exists('stage', $arguments) || ! is_string($arguments['stage'])) {
+            return ['error' => 'Missing required tool argument.'];
+        }
+
+        if (DeploymentStage::tryFrom($arguments['stage']) === null) {
+            return ['error' => 'Invalid deployment stage.'];
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $arguments
+     * @return array<string, mixed>
+     */
+    private function proposeUpdateDeploymentStage(CopilotContext $context, array $arguments): array
+    {
+        Gate::forUser($context->user)->authorize('propose', [AiProposedAction::class, $context->deployment]);
+
+        $action = $this->aiActionService->propose(
+            requester: $context->user,
+            deployment: $context->deployment,
+            actionType: AiActionType::UpdateDeploymentStage,
+            payload: ['stage' => $arguments['stage']],
+        );
+
+        return [
+            'action_id' => $action->id,
+            'status' => $action->status->value,
+            'message' => 'Deployment stage change proposed and pending approval.',
         ];
     }
 

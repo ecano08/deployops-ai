@@ -1,10 +1,13 @@
 <?php
 
+use App\Http\Controllers\AiProposedActionController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CopilotController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DeploymentController;
 use App\Http\Controllers\DeploymentIntegrationController;
+use App\Http\Controllers\EvaluationDatasetController;
+use App\Http\Controllers\EvaluationRunController;
 use App\Http\Controllers\IntegrationActivityController;
 use App\Http\Controllers\IntegrationWebhookController;
 use App\Http\Controllers\KnowledgeDocumentController;
@@ -92,4 +95,18 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/knowledge-documents', [KnowledgeDocumentController::class, 'store'])->scopeBindings();
     Route::get('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/knowledge-documents/{knowledge_document}', [KnowledgeDocumentController::class, 'show'])->scopeBindings();
     Route::delete('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/knowledge-documents/{knowledge_document}', [KnowledgeDocumentController::class, 'destroy'])->scopeBindings();
+    Route::get('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/evaluation-datasets', [EvaluationDatasetController::class, 'index'])->scopeBindings();
+    Route::post('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/evaluation-datasets', [EvaluationDatasetController::class, 'store'])->scopeBindings();
+    Route::get('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/evaluation-datasets/{evaluation_dataset}', [EvaluationDatasetController::class, 'show'])->scopeBindings();
+    Route::delete('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/evaluation-datasets/{evaluation_dataset}', [EvaluationDatasetController::class, 'destroy'])->scopeBindings();
+    Route::post('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/evaluation-datasets/{evaluation_dataset}/cases', [EvaluationDatasetController::class, 'storeCase'])->scopeBindings();
+    Route::get('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/evaluation-runs', [EvaluationRunController::class, 'index'])->scopeBindings();
+    Route::post('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/evaluation-datasets/{evaluation_dataset}/runs', [EvaluationRunController::class, 'store'])->scopeBindings();
+    Route::get('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/evaluation-runs/{evaluation_run}', [EvaluationRunController::class, 'show'])->scopeBindings();
+    Route::get('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/ai-actions', [AiProposedActionController::class, 'index'])->scopeBindings();
+    Route::get('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/ai-actions/pending', [AiProposedActionController::class, 'pending'])->scopeBindings();
+    Route::post('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/ai-actions', [AiProposedActionController::class, 'store'])->scopeBindings();
+    Route::get('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/ai-actions/{ai_proposed_action}', [AiProposedActionController::class, 'show'])->scopeBindings();
+    Route::post('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/ai-actions/{ai_proposed_action}/approve', [AiProposedActionController::class, 'approve'])->scopeBindings();
+    Route::post('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/ai-actions/{ai_proposed_action}/reject', [AiProposedActionController::class, 'reject'])->scopeBindings();
 });
