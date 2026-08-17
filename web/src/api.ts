@@ -2,6 +2,8 @@ import type {
   AuthResponse,
   CustomerListResponse,
   DeploymentListResponse,
+  IntegrationListResponse,
+  IntegrationTestResponse,
   UserResponse,
   WorkspaceListResponse,
   WorkspaceMemberListResponse,
@@ -108,5 +110,27 @@ export function fetchCustomers(workspaceId: number) {
 export function fetchDeployments(workspaceId: number, customerId: number) {
   return request<DeploymentListResponse>(
     `/api/workspaces/${workspaceId}/customers/${customerId}/deployments`,
+  )
+}
+
+export function fetchIntegrations(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+) {
+  return request<IntegrationListResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/integrations`,
+  )
+}
+
+export function testIntegration(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+  integrationId: number,
+) {
+  return request<IntegrationTestResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/integrations/${integrationId}/test`,
+    { method: 'POST' },
   )
 }

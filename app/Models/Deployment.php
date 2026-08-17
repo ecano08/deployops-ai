@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable(['workspace_id', 'customer_id', 'name', 'description', 'stage'])]
 class Deployment extends Model
@@ -39,5 +40,23 @@ class Deployment extends Model
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class);
+    }
+
+    /**
+     * @return HasMany<DeploymentIntegration, $this>
+     */
+    public function integrations(): HasMany
+    {
+        return $this->hasMany(DeploymentIntegration::class);
+    }
+
+    /**
+     * Scoped route binding alias for nested integration routes.
+     *
+     * @return HasMany<DeploymentIntegration, $this>
+     */
+    public function deploymentIntegrations(): HasMany
+    {
+        return $this->integrations();
     }
 }

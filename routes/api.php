@@ -3,6 +3,9 @@
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DeploymentController;
+use App\Http\Controllers\DeploymentIntegrationController;
+use App\Http\Controllers\IntegrationActivityController;
+use App\Http\Controllers\IntegrationWebhookController;
 use App\Http\Controllers\WorkspaceController;
 use App\Http\Controllers\WorkspaceMemberController;
 use Illuminate\Http\Client\ConnectionException;
@@ -49,6 +52,9 @@ Route::middleware('throttle:auth')->group(function () {
     Route::post('/login', [AuthController::class, 'login']);
 });
 
+Route::post('/webhooks/integrations/{deployment_integration}', [IntegrationWebhookController::class, 'store'])
+    ->middleware('throttle:integration-webhooks');
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', [AuthController::class, 'user']);
@@ -70,4 +76,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}', [DeploymentController::class, 'update'])->scopeBindings();
     Route::delete('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}', [DeploymentController::class, 'destroy'])->scopeBindings();
     Route::patch('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/stage', [DeploymentController::class, 'updateStage'])->scopeBindings();
+    Route::get('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/integrations', [DeploymentIntegrationController::class, 'index'])->scopeBindings();
+    Route::post('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/integrations', [DeploymentIntegrationController::class, 'store'])->scopeBindings();
+    Route::get('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/integrations/{deployment_integration}', [DeploymentIntegrationController::class, 'show'])->scopeBindings();
+    Route::patch('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/integrations/{deployment_integration}', [DeploymentIntegrationController::class, 'update'])->scopeBindings();
+    Route::delete('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/integrations/{deployment_integration}', [DeploymentIntegrationController::class, 'destroy'])->scopeBindings();
+    Route::post('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/integrations/{deployment_integration}/test', [DeploymentIntegrationController::class, 'test'])->scopeBindings();
+    Route::get('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/integrations/{deployment_integration}/activities', [IntegrationActivityController::class, 'index'])->scopeBindings();
 });
