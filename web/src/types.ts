@@ -275,3 +275,29 @@ export type IncidentListResponse = {
 export type AiProposedActionListResponse = {
   data: AiProposedAction[]
 }
+
+export type KnowledgeDocumentStatus = 'pending' | 'processing' | 'ready' | 'failed'
+
+export type KnowledgeDocument = {
+  id: number
+  workspace_id: number
+  customer_id: number
+  deployment_id: number
+  original_filename: string
+  mime_type: string
+  size_bytes: number
+  status: KnowledgeDocumentStatus
+  error_message: string | null
+  chunk_count: number
+  uploaded_by: number
+  created_at: string
+  updated_at: string
+}
+
+export type KnowledgeDocumentListResponse = {
+  data: KnowledgeDocument[]
+}
+
+export type KnowledgeDocumentResponse = {
+  data: KnowledgeDocument
+}

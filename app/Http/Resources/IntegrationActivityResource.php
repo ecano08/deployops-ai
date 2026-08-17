@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Enums\IntegrationActivityType;
+use App\Support\ResourceSanitizer;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -22,7 +23,7 @@ class IntegrationActivityResource extends JsonResource
             'deployment_integration_id' => $this->deployment_integration_id,
             'type' => $type instanceof IntegrationActivityType ? $type->value : (string) $type,
             'status' => $this->status,
-            'metadata' => $this->metadata,
+            'metadata' => ResourceSanitizer::metadata($this->metadata),
             'message' => $this->message,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,

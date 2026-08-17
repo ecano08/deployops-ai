@@ -63,7 +63,7 @@ Route::middleware('throttle:auth')->group(function () {
 Route::post('/webhooks/integrations/{deployment_integration}', [IntegrationWebhookController::class, 'store'])
     ->middleware('throttle:integration-webhooks');
 
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', [AuthController::class, 'user']);
     Route::get('/workspaces', [WorkspaceController::class, 'index']);

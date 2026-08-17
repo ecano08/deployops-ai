@@ -12,6 +12,8 @@ import type {
   IncidentListResponse,
   IntegrationListResponse,
   IntegrationTestResponse,
+  KnowledgeDocumentListResponse,
+  KnowledgeDocumentResponse,
   UserResponse,
   WorkspaceListResponse,
   WorkspaceMemberListResponse,
@@ -251,5 +253,68 @@ export function fetchIncidents(
 ) {
   return request<IncidentListResponse>(
     `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/incidents`,
+  )
+}
+
+export function fetchKnowledgeDocuments(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+) {
+  return request<KnowledgeDocumentListResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/knowledge-documents`,
+  )
+}
+
+export function uploadKnowledgeDocument(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+  file: File,
+) {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const headers = new Headers({ Accept: 'application/json' })
+  const token = getToken()
+
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`)
+  }
+
+  return fetch(
+    `${import.meta.env.VITE_API_URL}/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/knowledge-documents`,
+    {
+      method: 'POST',
+      headers,
+      body: formData,
+    },
+  ).then(async (response) => {
+    const payload = (await response.json().catch(() => ({}))) as KnowledgeDocumentResponse & {
+      message?: string
+      errors?: Record<string, string[]>
+    }
+
+    if (!response.ok) {
+      const firstError = payload.errors
+        ? Object.values(payload.errors)[0]?.[0]
+        : undefined
+
+      throw new Error(firstError ?? payload.message ?? `HTTP ${response.status}`)
+    }
+
+    return payload
+  })
+}
+
+export function deleteKnowledgeDocument(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+  documentId: number,
+) {
+  return request<void>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/knowledge-documents/${documentId}`,
+    { method: 'DELETE' },
   )
 }
