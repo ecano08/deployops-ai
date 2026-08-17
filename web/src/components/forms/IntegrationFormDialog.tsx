@@ -1,5 +1,6 @@
 import { useId, useState, type FormEvent } from 'react'
 import { fieldError, isApiValidationError } from '../../lib/apiError'
+import { required } from '../../lib/validation'
 import type { DeploymentIntegration, IntegrationType } from '../../types'
 import { FormDialog } from '../ui/FormDialog'
 import { FormField, FormInput, FormSelect } from '../ui/FormField'
@@ -39,10 +40,40 @@ export function IntegrationFormDialog({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({})
   const [formError, setFormError] = useState<string | null>(null)
 
+  function clearFieldError(field: string) {
+    if (fieldErrors[field]) {
+      setFieldErrors((current) => {
+        const next = { ...current }
+        delete next[field]
+        return next
+      })
+    }
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setFieldErrors({})
     setFormError(null)
+
+    const nextFieldErrors: Record<string, string[]> = {}
+    const nameError = required(name, 'Name')
+
+    if (nameError) {
+      nextFieldErrors.name = [nameError]
+    }
+
+    if (type === 'rest_api' && !integration) {
+      const baseUrlError = required(baseUrl, 'Base URL')
+
+      if (baseUrlError) {
+        nextFieldErrors.base_url = [baseUrlError]
+      }
+    }
+
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setFieldErrors(nextFieldErrors)
+      return
+    }
 
     try {
       await onSubmit({
@@ -91,8 +122,10 @@ export function IntegrationFormDialog({
         <FormInput
           id={nameId}
           value={name}
-          onChange={(event) => setName(event.target.value)}
-          required
+          onChange={(event) => {
+            setName(event.target.value)
+            clearFieldError('name')
+          }}
           autoFocus
         />
       </FormField>
@@ -107,9 +140,11 @@ export function IntegrationFormDialog({
             id={baseUrlId}
             type="url"
             value={baseUrl}
-            onChange={(event) => setBaseUrl(event.target.value)}
+            onChange={(event) => {
+              setBaseUrl(event.target.value)
+              clearFieldError('base_url')
+            }}
             placeholder="https://api.example.com"
-            required={!integration}
           />
         </FormField>
       )}
@@ -118,7 +153,10 @@ export function IntegrationFormDialog({
         <FormInput
           id={endpointId}
           value={endpoint}
-          onChange={(event) => setEndpoint(event.target.value)}
+          onChange={(event) => {
+            setEndpoint(event.target.value)
+            clearFieldError('endpoint')
+          }}
           placeholder={type === 'rest_api' ? '/health' : '/webhooks/deployops'}
         />
       </FormField>
@@ -138,7 +176,10 @@ export function IntegrationFormDialog({
             id={apiKeyId}
             type="password"
             value={apiKey}
-            onChange={(event) => setApiKey(event.target.value)}
+            onChange={(event) => {
+              setApiKey(event.target.value)
+              clearFieldError('api_key')
+            }}
             autoComplete="new-password"
           />
         </FormField>
@@ -159,7 +200,10 @@ export function IntegrationFormDialog({
             id={webhookSecretId}
             type="password"
             value={webhookSecret}
-            onChange={(event) => setWebhookSecret(event.target.value)}
+            onChange={(event) => {
+              setWebhookSecret(event.target.value)
+              clearFieldError('webhook_secret')
+            }}
             autoComplete="new-password"
           />
         </FormField>

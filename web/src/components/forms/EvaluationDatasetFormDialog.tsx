@@ -1,33 +1,27 @@
 import { useId, useState, type FormEvent } from 'react'
 import { fieldError, isApiValidationError } from '../../lib/apiError'
 import { required } from '../../lib/validation'
-import { DEPLOYMENT_STAGES, type Deployment, type DeploymentStage } from '../../types'
+import type { EvaluationDataset } from '../../types'
 import { FormDialog } from '../ui/FormDialog'
-import { FormField, FormInput, FormSelect, FormTextarea } from '../ui/FormField'
+import { FormField, FormInput, FormTextarea } from '../ui/FormField'
 
-type DeploymentFormDialogProps = {
-  deployment?: Deployment | null
+type EvaluationDatasetFormDialogProps = {
+  dataset?: EvaluationDataset | null
   loading?: boolean
-  onSubmit: (payload: {
-    name: string
-    description: string | null
-    stage: DeploymentStage
-  }) => Promise<void>
+  onSubmit: (payload: { name: string; description: string | null }) => Promise<void>
   onCancel: () => void
 }
 
-export function DeploymentFormDialog({
-  deployment,
+export function EvaluationDatasetFormDialog({
+  dataset,
   loading = false,
   onSubmit,
   onCancel,
-}: DeploymentFormDialogProps) {
+}: EvaluationDatasetFormDialogProps) {
   const nameId = useId()
   const descriptionId = useId()
-  const stageId = useId()
-  const [name, setName] = useState(deployment?.name ?? '')
-  const [description, setDescription] = useState(deployment?.description ?? '')
-  const [stage, setStage] = useState<DeploymentStage>(deployment?.stage ?? 'discovery')
+  const [name, setName] = useState(dataset?.name ?? '')
+  const [description, setDescription] = useState(dataset?.description ?? '')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({})
   const [formError, setFormError] = useState<string | null>(null)
 
@@ -52,7 +46,6 @@ export function DeploymentFormDialog({
       await onSubmit({
         name: name.trim(),
         description: description.trim() === '' ? null : description.trim(),
-        stage,
       })
     } catch (error) {
       if (isApiValidationError(error)) {
@@ -61,16 +54,16 @@ export function DeploymentFormDialog({
         return
       }
 
-      setFormError(error instanceof Error ? error.message : 'Unable to save deployment.')
+      setFormError(error instanceof Error ? error.message : 'Unable to save evaluation dataset.')
     }
   }
 
   return (
     <FormDialog
       open
-      title={deployment ? 'Edit deployment' : 'Create deployment'}
-      description="Deployments track delivery stages for a customer engagement."
-      submitLabel={deployment ? 'Save changes' : 'Create deployment'}
+      title={dataset ? 'Edit evaluation dataset' : 'Create evaluation dataset'}
+      description="Group related copilot test cases for a deployment. Run the dataset to measure pass rate and latency."
+      submitLabel={dataset ? 'Save changes' : 'Create dataset'}
       loading={loading}
       error={formError}
       onSubmit={handleSubmit}
@@ -98,6 +91,7 @@ export function DeploymentFormDialog({
         label="Description"
         htmlFor={descriptionId}
         error={fieldError(fieldErrors, 'description')}
+        hint="Optional context for teammates reviewing this dataset."
       >
         <FormTextarea
           id={descriptionId}
@@ -114,29 +108,6 @@ export function DeploymentFormDialog({
           }}
           rows={3}
         />
-      </FormField>
-
-      <FormField label="Stage" htmlFor={stageId} error={fieldError(fieldErrors, 'stage')}>
-        <FormSelect
-          id={stageId}
-          value={stage}
-          onChange={(event) => {
-            setStage(event.target.value as DeploymentStage)
-            if (fieldErrors.stage) {
-              setFieldErrors((current) => {
-                const next = { ...current }
-                delete next.stage
-                return next
-              })
-            }
-          }}
-        >
-          {DEPLOYMENT_STAGES.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </FormSelect>
       </FormField>
     </FormDialog>
   )

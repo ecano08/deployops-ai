@@ -17,12 +17,20 @@ use Illuminate\Support\Facades\Gate;
 
 class AiProposedActionController extends Controller
 {
+    /**
+     * @return array<int, string>
+     */
+    private function actionRelations(): array
+    {
+        return ['auditEvents', 'requester', 'workspace.members'];
+    }
+
     public function index(Workspace $workspace, Customer $customer, Deployment $deployment): AnonymousResourceCollection
     {
         Gate::authorize('viewAny', [AiProposedAction::class, $deployment]);
 
         $actions = $deployment->aiProposedActions()
-            ->with('auditEvents')
+            ->with($this->actionRelations())
             ->orderByDesc('created_at')
             ->get();
 
@@ -43,9 +51,11 @@ class AiProposedActionController extends Controller
             payload: $request->validated('payload'),
         );
 
-        return AiProposedActionResource::make($action->load('auditEvents'))
+        $statusCode = $action->wasRecentlyCreated ? 201 : 200;
+
+        return AiProposedActionResource::make($action->load($this->actionRelations()))
             ->response()
-            ->setStatusCode(201);
+            ->setStatusCode($statusCode);
     }
 
     public function show(
@@ -56,7 +66,7 @@ class AiProposedActionController extends Controller
     ): AiProposedActionResource {
         Gate::authorize('view', $aiProposedAction);
 
-        return AiProposedActionResource::make($aiProposedAction->load('auditEvents'));
+        return AiProposedActionResource::make($aiProposedAction->load($this->actionRelations()));
     }
 
     public function approve(
@@ -92,7 +102,7 @@ class AiProposedActionController extends Controller
 
         $actions = $deployment->aiProposedActions()
             ->where('status', AiActionStatus::Pending)
-            ->with('auditEvents')
+            ->with($this->actionRelations())
             ->orderBy('created_at')
             ->get();
 

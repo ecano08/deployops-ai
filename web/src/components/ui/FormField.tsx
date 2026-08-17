@@ -26,6 +26,21 @@ type FormFieldProps = {
   children: ReactNode
 }
 
+function enhanceControl(
+  child: ReactElement<FormFieldChildProps>,
+  fieldId: string,
+  hasError: boolean,
+): ReactElement<FormFieldChildProps> {
+  const errorId = `${fieldId}-error`
+
+  return cloneElement(child, {
+    id: fieldId,
+    'aria-invalid': hasError || undefined,
+    'aria-describedby': hasError ? errorId : child.props['aria-describedby'],
+    className: [child.props.className, hasError ? 'is-invalid' : ''].filter(Boolean).join(' ') || undefined,
+  })
+}
+
 export function FormField({
   label,
   htmlFor,
@@ -42,12 +57,18 @@ export function FormField({
   if (htmlFor) {
     const errorId = `${htmlFor}-error`
 
+    if (!isValidElement(children)) {
+      throw new Error('FormField child must be a single element when htmlFor is provided.')
+    }
+
+    const control = enhanceControl(children as ReactElement<FormFieldChildProps>, htmlFor, hasError)
+
     return (
       <div className={`form-field ${invalidClass} ${className}`.trim()}>
         <label htmlFor={htmlFor} className={hideLabel ? 'sr-only' : 'form-field__label'}>
           {label}
         </label>
-        {children}
+        {control}
         {hint && <span className="form-field__hint">{hint}</span>}
         {hasError && (
           <p id={errorId} className="form-field__error" role="alert">
@@ -65,13 +86,7 @@ export function FormField({
   const child = children as ReactElement<FormFieldChildProps>
   const fieldId = child.props.id ?? generatedId
   const errorId = `${fieldId}-error`
-
-  const control = cloneElement(child, {
-    id: fieldId,
-    'aria-invalid': hasError || undefined,
-    'aria-describedby': hasError ? errorId : undefined,
-    className: [child.props.className, hasError ? 'is-invalid' : ''].filter(Boolean).join(' ') || undefined,
-  })
+  const control = enhanceControl(child, fieldId, hasError)
 
   return (
     <div className={`form-field ${invalidClass} ${className}`.trim()}>

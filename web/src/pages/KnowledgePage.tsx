@@ -44,7 +44,6 @@ export function KnowledgePage({
   onDelete,
 }: KnowledgePageProps) {
   const [deleteTarget, setDeleteTarget] = useState<KnowledgeDocument | null>(null)
-  const [deleting, setDeleting] = useState(false)
   const [uploading, setUploading] = useState(false)
 
   if (!deployment) {
@@ -79,14 +78,7 @@ export function KnowledgePage({
       return
     }
 
-    setDeleting(true)
-
-    try {
-      await onDelete(deleteTarget.id)
-      setDeleteTarget(null)
-    } finally {
-      setDeleting(false)
-    }
+    await onDelete(deleteTarget.id)
   }
 
   const readyCount = documents.filter((d) => d.status.toLowerCase() === 'ready').length
@@ -181,7 +173,6 @@ export function KnowledgePage({
         title="Delete document?"
         description={`This will remove "${deleteTarget?.original_filename}" and its vector index. This cannot be undone.`}
         confirmLabel="Delete"
-        loading={deleting}
         onConfirm={confirmDelete}
         onCancel={() => setDeleteTarget(null)}
       />

@@ -196,12 +196,22 @@ export type EvaluationRun = {
 
 export type AiActionStatus = 'pending' | 'approved' | 'rejected' | 'executed' | 'failed'
 
+export type AiActionRequester = {
+  id: number
+  name: string | null
+  email?: string | null
+}
+
+export function aiActionRequesterLabel(requester: AiActionRequester): string {
+  return requester.name ?? 'unknown user'
+}
+
 export type AiProposedAction = {
   id: number
   action_type: string
   payload: Record<string, unknown>
   status: AiActionStatus
-  requested_by: number
+  requested_by: AiActionRequester
   approved_by: number | null
   executed_at: string | null
   error_message: string | null
@@ -209,6 +219,14 @@ export type AiProposedAction = {
 
 export type EvaluationDatasetListResponse = {
   data: EvaluationDataset[]
+}
+
+export type EvaluationDatasetResponse = {
+  data: EvaluationDataset
+}
+
+export type EvaluationCaseResponse = {
+  data: EvaluationCase
 }
 
 export type EvaluationRunListResponse = {

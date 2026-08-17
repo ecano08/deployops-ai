@@ -1,4 +1,4 @@
-import { ApiValidationError } from './lib/apiError'
+import { ApiError, ApiValidationError } from './lib/apiError'
 import type {
   AiHealthSummaryResponse,
   AiProposedActionListResponse,
@@ -12,6 +12,8 @@ import type {
   DeploymentResponse,
   DeploymentStage,
   EvaluationDatasetListResponse,
+  EvaluationDatasetResponse,
+  EvaluationCaseResponse,
   EvaluationRunListResponse,
   EvaluationRunResponse,
   IncidentListResponse,
@@ -32,12 +34,17 @@ const TOKEN_KEY = 'deployops_token'
 type ApiErrorPayload = {
   message?: string
   errors?: Record<string, string[]>
+  reference?: string | number | null
 }
 
 function throwApiError(payload: ApiErrorPayload, status: number): never {
   const firstError = payload.errors
     ? Object.values(payload.errors)[0]?.[0]
     : undefined
+  const reference =
+    payload.reference !== undefined && payload.reference !== null
+      ? String(payload.reference)
+      : null
 
   if (payload.errors) {
     throw new ApiValidationError(
@@ -46,7 +53,7 @@ function throwApiError(payload: ApiErrorPayload, status: number): never {
     )
   }
 
-  throw new Error(firstError ?? payload.message ?? `HTTP ${status}`)
+  throw new ApiError(firstError ?? payload.message ?? `HTTP ${status}`, reference)
 }
 
 export function getToken(): string | null {
@@ -310,6 +317,105 @@ export function fetchEvaluationDatasets(
 ) {
   return request<EvaluationDatasetListResponse>(
     `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/evaluation-datasets`,
+  )
+}
+
+export function createEvaluationDataset(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+  payload: { name: string; description?: string | null },
+) {
+  return request<EvaluationDatasetResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/evaluation-datasets`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  )
+}
+
+export function updateEvaluationDataset(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+  datasetId: number,
+  payload: { name?: string; description?: string | null },
+) {
+  return request<EvaluationDatasetResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/evaluation-datasets/${datasetId}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    },
+  )
+}
+
+export function deleteEvaluationDataset(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+  datasetId: number,
+) {
+  return request<void>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/evaluation-datasets/${datasetId}`,
+    { method: 'DELETE' },
+  )
+}
+
+export function createEvaluationCase(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+  datasetId: number,
+  payload: {
+    input: string
+    expected_behavior: string
+    expected_tools?: string[] | null
+    expected_sources?: string[] | null
+  },
+) {
+  return request<EvaluationCaseResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/evaluation-datasets/${datasetId}/cases`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  )
+}
+
+export function updateEvaluationCase(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+  datasetId: number,
+  caseId: number,
+  payload: {
+    input?: string
+    expected_behavior?: string
+    expected_tools?: string[] | null
+    expected_sources?: string[] | null
+  },
+) {
+  return request<EvaluationCaseResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/evaluation-datasets/${datasetId}/cases/${caseId}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    },
+  )
+}
+
+export function deleteEvaluationCase(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+  datasetId: number,
+  caseId: number,
+) {
+  return request<void>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/evaluation-datasets/${datasetId}/cases/${caseId}`,
+    { method: 'DELETE' },
   )
 }
 

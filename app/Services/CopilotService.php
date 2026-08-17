@@ -30,6 +30,7 @@ class CopilotService
             throw new CopilotException(
                 $telemetry['error'],
                 $telemetry['status_code'] ?? 502,
+                isset($telemetry['reference']) ? (string) $telemetry['reference'] : null,
             );
         }
 
@@ -46,7 +47,8 @@ class CopilotService
      *   sources_used: array<int, string>,
      *   latency_ms: int,
      *   error: string|null,
-     *   status_code: int|null
+     *   status_code: int|null,
+     *   reference: int|null
      * }
      */
     public function askWithTelemetry(CopilotContext $context, string $question, bool $persistLog = true): array
@@ -61,12 +63,11 @@ class CopilotService
             $instructions = $this->instructions($context);
             $tools = $this->toolExecutor->definitions();
             $input = $question;
-            $previousResponseId = null;
+            $conversationItems = null;
 
             for ($round = 0; $round < self::MAX_TOOL_ROUNDS; $round++) {
-                $response = $this->openAI->create($instructions, $input, $tools, $previousResponseId);
+                $response = $this->openAI->create($instructions, $input, $tools);
                 $traceRecorder->addUsage($response);
-                $previousResponseId = $this->openAI->responseId($response);
 
                 $functionCalls = $this->openAI->extractFunctionCalls($response);
 
@@ -90,6 +91,7 @@ class CopilotService
                         'latency_ms' => $latencyMs,
                         'error' => null,
                         'status_code' => null,
+                        'reference' => null,
                     ];
                 }
 
@@ -136,11 +138,29 @@ class CopilotService
                     ];
                 }
 
-                $input = $toolOutputs;
+                $functionCallItems = $this->openAI->extractFunctionCallItems($response);
+
+                if ($conversationItems === null) {
+                    $conversationItems = [
+                        $this->openAI->userMessageItem($question),
+                        ...$functionCallItems,
+                        ...$toolOutputs,
+                    ];
+                } else {
+                    $conversationItems = [
+                        ...$conversationItems,
+                        ...$functionCallItems,
+                        ...$toolOutputs,
+                    ];
+                }
+
+                $input = $conversationItems;
             }
 
             throw new CopilotException('The copilot exceeded the maximum number of tool calls.', 502);
         } catch (CopilotException $exception) {
+            $reference = null;
+
             if ($persistLog) {
                 $trace = $this->logRequest(
                     $context,
@@ -152,6 +172,7 @@ class CopilotService
                     $exception->getMessage(),
                     $traceRecorder,
                 );
+                $reference = $trace->id;
                 $this->incidentService->createFromAiFailure($trace, $exception->getMessage());
             }
 
@@ -162,8 +183,11 @@ class CopilotService
                 'latency_ms' => $this->latencyMs($startedAt),
                 'error' => $exception->getMessage(),
                 'status_code' => $exception->statusCode,
+                'reference' => $reference,
             ];
         } catch (\Throwable $exception) {
+            $reference = null;
+
             if ($persistLog) {
                 $trace = $this->logRequest(
                     $context,
@@ -175,6 +199,7 @@ class CopilotService
                     'An unexpected copilot error occurred.',
                     $traceRecorder,
                 );
+                $reference = $trace->id;
                 $this->incidentService->createFromAiFailure($trace, 'An unexpected copilot error occurred.');
             }
 
@@ -185,6 +210,7 @@ class CopilotService
                 'latency_ms' => $this->latencyMs($startedAt),
                 'error' => 'An unexpected copilot error occurred.',
                 'status_code' => 503,
+                'reference' => $reference,
             ];
         }
     }

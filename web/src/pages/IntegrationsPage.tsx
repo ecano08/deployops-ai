@@ -59,7 +59,6 @@ export function IntegrationsPage({
   const [editingIntegration, setEditingIntegration] = useState<DeploymentIntegration | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<DeploymentIntegration | null>(null)
   const [saving, setSaving] = useState(false)
-  const [deleting, setDeleting] = useState(false)
   const [testingId, setTestingId] = useState<number | null>(null)
 
   const canManage = canManageDeployments(workspace?.current_user_role)
@@ -153,14 +152,7 @@ export function IntegrationsPage({
       return
     }
 
-    setDeleting(true)
-
-    try {
-      await onDelete(deleteTarget.id)
-      setDeleteTarget(null)
-    } finally {
-      setDeleting(false)
-    }
+    await onDelete(deleteTarget.id)
   }
 
   async function handleTest(integrationId: number) {
@@ -320,7 +312,6 @@ export function IntegrationsPage({
         title="Delete integration?"
         description={`This will remove "${deleteTarget?.name}" and stop inbound or outbound traffic for this connection.`}
         confirmLabel="Delete integration"
-        loading={deleting}
         onConfirm={confirmDelete}
         onCancel={() => setDeleteTarget(null)}
       />

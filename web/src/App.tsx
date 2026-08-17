@@ -1,14 +1,18 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import {
   approveAiAction,
   askCopilot,
   clearToken,
   createCustomer,
   createDeployment,
+  createEvaluationCase,
+  createEvaluationDataset,
   createIntegration,
   createWorkspace,
   deleteCustomer,
   deleteDeployment,
+  deleteEvaluationCase,
+  deleteEvaluationDataset,
   deleteIntegration,
   deleteKnowledgeDocument,
   fetchAiHealth,
@@ -32,6 +36,8 @@ import {
   updateCustomer,
   updateDeployment,
   updateDeploymentStage,
+  updateEvaluationCase,
+  updateEvaluationDataset,
   updateIntegration,
   uploadKnowledgeDocument,
 } from './api'
@@ -40,6 +46,7 @@ import type { AppView } from './components/layout/Sidebar'
 import { EmptyState } from './components/ui/EmptyState'
 import { LoadingState } from './components/ui/LoadingState'
 import { canManageCustomers, canManageDeployments } from './lib/permissions'
+import { apiErrorReference } from './lib/apiError'
 import { ApprovalsPage } from './pages/ApprovalsPage'
 import { AuthPage } from './pages/AuthPage'
 import { CopilotPage } from './pages/CopilotPage'
@@ -56,6 +63,7 @@ import type {
   Deployment,
   DeploymentIntegration,
   DeploymentStage,
+  EvaluationDataset,
   EvaluationRun,
   Incident,
   KnowledgeDocument,
@@ -104,7 +112,12 @@ function App() {
   const [copilotAnswer, setCopilotAnswer] = useState<string | null>(null)
   const [copilotToolsUsed, setCopilotToolsUsed] = useState<string[]>([])
   const [copilotError, setCopilotError] = useState<string | null>(null)
+  const [copilotErrorReference, setCopilotErrorReference] = useState<string | null>(null)
   const [copilotLoading, setCopilotLoading] = useState(false)
+  const knowledgePollInFlight = useRef(false)
+  const [evaluationDatasets, setEvaluationDatasets] = useState<EvaluationDataset[]>([])
+  const [evaluationDatasetsError, setEvaluationDatasetsError] = useState<string | null>(null)
+  const [evaluationDatasetsLoading, setEvaluationDatasetsLoading] = useState(false)
   const [evaluationRuns, setEvaluationRuns] = useState<EvaluationRun[]>([])
   const [evaluationRunsError, setEvaluationRunsError] = useState<string | null>(null)
   const [evaluationRunsLoading, setEvaluationRunsLoading] = useState(false)
@@ -128,6 +141,122 @@ function App() {
   const selectedWorkspace = workspaces.find((workspace) => workspace.id === selectedWorkspaceId) ?? null
   const selectedCustomer = customers.find((customer) => customer.id === selectedCustomerId) ?? null
   const selectedDeployment = deployments.find((deployment) => deployment.id === selectedDeploymentId) ?? null
+
+  const refreshEvaluationData = useCallback(async () => {
+    if (
+      selectedWorkspaceId === null ||
+      selectedCustomerId === null ||
+      selectedDeploymentId === null
+    ) {
+      return
+    }
+
+    setEvaluationDatasetsLoading(true)
+    setEvaluationRunsLoading(true)
+
+    try {
+      const [runsResponse, datasetsResponse] = await Promise.all([
+        fetchEvaluationRuns(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId),
+        fetchEvaluationDatasets(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId),
+      ])
+
+      setEvaluationRuns(runsResponse.data)
+      setEvaluationRunsError(null)
+      setEvaluationDatasets(datasetsResponse.data)
+      setEvaluationDatasetsError(null)
+      setEvaluationDatasetId((current) => {
+        if (current !== null && datasetsResponse.data.some((dataset) => dataset.id === current)) {
+          return current
+        }
+
+        return datasetsResponse.data[0]?.id ?? null
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load evaluation data.'
+      setEvaluationRuns([])
+      setEvaluationRunsError(message)
+      setEvaluationDatasets([])
+      setEvaluationDatasetsError(message)
+      setEvaluationDatasetId(null)
+    } finally {
+      setEvaluationDatasetsLoading(false)
+      setEvaluationRunsLoading(false)
+    }
+  }, [selectedWorkspaceId, selectedCustomerId, selectedDeploymentId])
+
+  const refreshObservabilityData = useCallback(async () => {
+    if (
+      selectedWorkspaceId === null ||
+      selectedCustomerId === null ||
+      selectedDeploymentId === null
+    ) {
+      return
+    }
+
+    try {
+      const [healthResponse, tracesResponse, incidentsResponse] = await Promise.all([
+        fetchAiHealth(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId),
+        fetchAiTraces(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId),
+        fetchIncidents(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId),
+      ])
+      setAiHealth(healthResponse.data)
+      setAiHealthError(null)
+      setAiTraces(tracesResponse.data)
+      setAiTracesError(null)
+      setIncidents(incidentsResponse.data)
+      setIncidentsError(null)
+    } catch (error) {
+      setAiHealth(null)
+      setAiHealthError(error instanceof Error ? error.message : 'Failed to load observability data.')
+      setAiTraces([])
+      setAiTracesError(error instanceof Error ? error.message : 'Failed to load observability data.')
+      setIncidents([])
+      setIncidentsError(error instanceof Error ? error.message : 'Failed to load observability data.')
+    }
+  }, [selectedWorkspaceId, selectedCustomerId, selectedDeploymentId])
+
+  const refreshDeployments = useCallback(async () => {
+    if (selectedWorkspaceId === null || selectedCustomerId === null) {
+      return
+    }
+
+    try {
+      const response = await fetchDeployments(selectedWorkspaceId, selectedCustomerId)
+      setDeployments(response.data)
+      setDeploymentsError(null)
+    } catch (error) {
+      setDeploymentsError(error instanceof Error ? error.message : 'Failed to load deployments.')
+    }
+  }, [selectedWorkspaceId, selectedCustomerId])
+
+  const refreshPendingAiActions = useCallback(async () => {
+    if (
+      selectedWorkspaceId === null ||
+      selectedCustomerId === null ||
+      selectedDeploymentId === null
+    ) {
+      return
+    }
+
+    setPendingAiActionsLoading(true)
+
+    try {
+      const response = await fetchPendingAiActions(
+        selectedWorkspaceId,
+        selectedCustomerId,
+        selectedDeploymentId,
+      )
+      setPendingAiActions(response.data)
+      setPendingAiActionsError(null)
+    } catch (error) {
+      setPendingAiActions([])
+      setPendingAiActionsError(
+        error instanceof Error ? error.message : 'Failed to load pending actions.',
+      )
+    } finally {
+      setPendingAiActionsLoading(false)
+    }
+  }, [selectedWorkspaceId, selectedCustomerId, selectedDeploymentId])
 
   const handleAuthenticated = () => {
     setLoadingUser(true)
@@ -355,6 +484,55 @@ function App() {
   }, [user, selectedWorkspaceId, selectedCustomerId, selectedDeploymentId])
 
   useEffect(() => {
+    if (
+      !user ||
+      selectedWorkspaceId === null ||
+      selectedCustomerId === null ||
+      selectedDeploymentId === null
+    ) {
+      return
+    }
+
+    const hasProcessingDocuments = knowledgeDocuments.some((document) => {
+      const status = document.status.toLowerCase()
+      return status === 'pending' || status === 'processing'
+    })
+
+    if (!hasProcessingDocuments) {
+      return
+    }
+
+    const intervalId = window.setInterval(() => {
+      if (knowledgePollInFlight.current) {
+        return
+      }
+
+      knowledgePollInFlight.current = true
+
+      fetchKnowledgeDocuments(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId)
+        .then((response) => {
+          setKnowledgeDocuments(response.data)
+        })
+        .catch(() => {
+          // Keep the current list visible if a poll request fails transiently.
+        })
+        .finally(() => {
+          knowledgePollInFlight.current = false
+        })
+    }, 2500)
+
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [
+    user,
+    selectedWorkspaceId,
+    selectedCustomerId,
+    selectedDeploymentId,
+    knowledgeDocuments,
+  ])
+
+  useEffect(() => {
     if (!user || selectedWorkspaceId === null || selectedCustomerId === null || selectedDeploymentId === null) {
       return
     }
@@ -364,28 +542,113 @@ function App() {
     Promise.all([
       fetchEvaluationRuns(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId),
       fetchEvaluationDatasets(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId),
-      fetchPendingAiActions(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId),
     ])
-      .then(([runsResponse, datasetsResponse, actionsResponse]) => {
+      .then(([runsResponse, datasetsResponse]) => {
         if (!cancelled) {
           setEvaluationRuns(runsResponse.data)
           setEvaluationRunsError(null)
-          setEvaluationDatasetId(datasetsResponse.data[0]?.id ?? null)
+          setEvaluationDatasets(datasetsResponse.data)
+          setEvaluationDatasetsError(null)
+          setEvaluationDatasetId((current) => {
+            if (current !== null && datasetsResponse.data.some((dataset) => dataset.id === current)) {
+              return current
+            }
+
+            return datasetsResponse.data[0]?.id ?? null
+          })
+        }
+      })
+      .catch((error: Error) => {
+        if (!cancelled) {
+          const message = error.message
+          setEvaluationRuns([])
+          setEvaluationRunsError(message)
+          setEvaluationDatasets([])
+          setEvaluationDatasetsError(message)
+          setEvaluationDatasetId(null)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setEvaluationDatasetsLoading(false)
+          setEvaluationRunsLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [user, selectedWorkspaceId, selectedCustomerId, selectedDeploymentId])
+
+  useEffect(() => {
+    if (
+      activeView !== 'evals' ||
+      !user ||
+      selectedWorkspaceId === null ||
+      selectedCustomerId === null ||
+      selectedDeploymentId === null
+    ) {
+      return
+    }
+
+    let cancelled = false
+
+    Promise.all([
+      fetchEvaluationRuns(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId),
+      fetchEvaluationDatasets(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId),
+    ])
+      .then(([runsResponse, datasetsResponse]) => {
+        if (!cancelled) {
+          setEvaluationRuns(runsResponse.data)
+          setEvaluationRunsError(null)
+          setEvaluationDatasets(datasetsResponse.data)
+          setEvaluationDatasetsError(null)
+          setEvaluationDatasetId((current) => {
+            if (current !== null && datasetsResponse.data.some((dataset) => dataset.id === current)) {
+              return current
+            }
+
+            return datasetsResponse.data[0]?.id ?? null
+          })
+        }
+      })
+      .catch((error: Error) => {
+        if (!cancelled) {
+          const message = error.message
+          setEvaluationRuns([])
+          setEvaluationRunsError(message)
+          setEvaluationDatasets([])
+          setEvaluationDatasetsError(message)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeView, user, selectedWorkspaceId, selectedCustomerId, selectedDeploymentId])
+
+  useEffect(() => {
+    if (!user || selectedWorkspaceId === null || selectedCustomerId === null || selectedDeploymentId === null) {
+      return
+    }
+
+    let cancelled = false
+
+    fetchPendingAiActions(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId)
+      .then((actionsResponse) => {
+        if (!cancelled) {
           setPendingAiActions(actionsResponse.data)
           setPendingAiActionsError(null)
         }
       })
       .catch((error: Error) => {
         if (!cancelled) {
-          setEvaluationRuns([])
-          setEvaluationRunsError(error.message)
           setPendingAiActions([])
           setPendingAiActionsError(error.message)
         }
       })
       .finally(() => {
         if (!cancelled) {
-          setEvaluationRunsLoading(false)
           setPendingAiActionsLoading(false)
         }
       })
@@ -394,6 +657,43 @@ function App() {
       cancelled = true
     }
   }, [user, selectedWorkspaceId, selectedCustomerId, selectedDeploymentId])
+
+  useEffect(() => {
+    if (
+      activeView !== 'approvals' ||
+      !user ||
+      selectedWorkspaceId === null ||
+      selectedCustomerId === null ||
+      selectedDeploymentId === null
+    ) {
+      return
+    }
+
+    let cancelled = false
+
+    fetchPendingAiActions(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId)
+      .then((actionsResponse) => {
+        if (!cancelled) {
+          setPendingAiActions(actionsResponse.data)
+          setPendingAiActionsError(null)
+        }
+      })
+      .catch((error: Error) => {
+        if (!cancelled) {
+          setPendingAiActions([])
+          setPendingAiActionsError(error.message)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setPendingAiActionsLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeView, user, selectedWorkspaceId, selectedCustomerId, selectedDeploymentId])
 
   useEffect(() => {
     if (!user || selectedWorkspaceId === null || selectedCustomerId === null || selectedDeploymentId === null) {
@@ -440,6 +740,50 @@ function App() {
     }
   }, [user, selectedWorkspaceId, selectedCustomerId, selectedDeploymentId])
 
+  useEffect(() => {
+    if (
+      activeView !== 'observability' ||
+      !user ||
+      selectedWorkspaceId === null ||
+      selectedCustomerId === null ||
+      selectedDeploymentId === null
+    ) {
+      return
+    }
+
+    let cancelled = false
+
+    Promise.all([
+      fetchAiHealth(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId),
+      fetchAiTraces(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId),
+      fetchIncidents(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId),
+    ])
+      .then(([healthResponse, tracesResponse, incidentsResponse]) => {
+        if (!cancelled) {
+          setAiHealth(healthResponse.data)
+          setAiHealthError(null)
+          setAiTraces(tracesResponse.data)
+          setAiTracesError(null)
+          setIncidents(incidentsResponse.data)
+          setIncidentsError(null)
+        }
+      })
+      .catch((error: Error) => {
+        if (!cancelled) {
+          setAiHealth(null)
+          setAiHealthError(error.message)
+          setAiTraces([])
+          setAiTracesError(error.message)
+          setIncidents([])
+          setIncidentsError(error.message)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeView, user, selectedWorkspaceId, selectedCustomerId, selectedDeploymentId])
+
   function resetDeploymentState() {
     setIntegrations([])
     setIntegrationsError(null)
@@ -454,6 +798,9 @@ function App() {
     setCopilotToolsUsed([])
     setCopilotError(null)
     setCopilotLoading(false)
+    setEvaluationDatasets([])
+    setEvaluationDatasetsError(null)
+    setEvaluationDatasetsLoading(false)
     setEvaluationRuns([])
     setEvaluationRunsError(null)
     setEvaluationRunsLoading(false)
@@ -504,6 +851,7 @@ function App() {
     resetDeploymentState()
     setIntegrationsLoading(true)
     setKnowledgeLoading(true)
+    setEvaluationDatasetsLoading(true)
     setEvaluationRunsLoading(true)
     setPendingAiActionsLoading(true)
     setAiHealthLoading(true)
@@ -729,12 +1077,11 @@ function App() {
     setIntegrationTestMessage(null)
   }
 
-  async function handleRunEvaluation() {
+  async function handleRunEvaluation(datasetId: number) {
     if (
       selectedWorkspaceId === null ||
       selectedCustomerId === null ||
-      selectedDeploymentId === null ||
-      evaluationDatasetId === null
+      selectedDeploymentId === null
     ) {
       return
     }
@@ -746,28 +1093,208 @@ function App() {
         selectedWorkspaceId,
         selectedCustomerId,
         selectedDeploymentId,
-        evaluationDatasetId,
+        datasetId,
       )
       setEvaluationRuns((current) => [response.data, ...current])
       setEvaluationRunMessage(
         `Evaluation completed: ${response.data.metrics.passed_cases}/${response.data.metrics.total_cases} passed.`,
       )
+      await refreshEvaluationData()
     } catch (error) {
       setEvaluationRunMessage(error instanceof Error ? error.message : 'Evaluation run failed.')
     }
   }
 
-  async function refreshPendingAiActions() {
-    if (selectedWorkspaceId === null || selectedCustomerId === null || selectedDeploymentId === null) {
+  async function handleCreateEvaluationDataset(payload: {
+    name: string
+    description: string | null
+  }) {
+    if (
+      selectedWorkspaceId === null ||
+      selectedCustomerId === null ||
+      selectedDeploymentId === null
+    ) {
       return
     }
 
-    const response = await fetchPendingAiActions(
+    const response = await createEvaluationDataset(
       selectedWorkspaceId,
       selectedCustomerId,
       selectedDeploymentId,
+      payload,
     )
-    setPendingAiActions(response.data)
+
+    setEvaluationDatasets((current) =>
+      [...current, response.data].sort((left, right) => left.name.localeCompare(right.name)),
+    )
+    setEvaluationDatasetId(response.data.id)
+    setEvaluationRunMessage(`Created dataset "${response.data.name}".`)
+  }
+
+  async function handleUpdateEvaluationDataset(
+    datasetId: number,
+    payload: { name: string; description: string | null },
+  ) {
+    if (
+      selectedWorkspaceId === null ||
+      selectedCustomerId === null ||
+      selectedDeploymentId === null
+    ) {
+      return
+    }
+
+    const response = await updateEvaluationDataset(
+      selectedWorkspaceId,
+      selectedCustomerId,
+      selectedDeploymentId,
+      datasetId,
+      payload,
+    )
+
+    setEvaluationDatasets((current) =>
+      current
+        .map((dataset) => (dataset.id === datasetId ? response.data : dataset))
+        .sort((left, right) => left.name.localeCompare(right.name)),
+    )
+    setEvaluationRunMessage(`Updated dataset "${response.data.name}".`)
+  }
+
+  async function handleDeleteEvaluationDataset(datasetId: number) {
+    if (
+      selectedWorkspaceId === null ||
+      selectedCustomerId === null ||
+      selectedDeploymentId === null
+    ) {
+      return
+    }
+
+    await deleteEvaluationDataset(
+      selectedWorkspaceId,
+      selectedCustomerId,
+      selectedDeploymentId,
+      datasetId,
+    )
+
+    setEvaluationDatasets((current) => {
+      const next = current.filter((dataset) => dataset.id !== datasetId)
+      setEvaluationDatasetId((selectedId) => {
+        if (selectedId === datasetId) {
+          return next[0]?.id ?? null
+        }
+
+        return selectedId
+      })
+
+      return next
+    })
+    setEvaluationRunMessage('Evaluation dataset deleted.')
+  }
+
+  async function handleCreateEvaluationCase(
+    datasetId: number,
+    payload: {
+      input: string
+      expected_behavior: string
+      expected_tools: string[] | null
+      expected_sources: string[] | null
+    },
+  ) {
+    if (
+      selectedWorkspaceId === null ||
+      selectedCustomerId === null ||
+      selectedDeploymentId === null
+    ) {
+      return
+    }
+
+    const response = await createEvaluationCase(
+      selectedWorkspaceId,
+      selectedCustomerId,
+      selectedDeploymentId,
+      datasetId,
+      payload,
+    )
+
+    setEvaluationDatasets((current) =>
+      current.map((dataset) =>
+        dataset.id === datasetId
+          ? { ...dataset, cases: [...(dataset.cases ?? []), response.data] }
+          : dataset,
+      ),
+    )
+    setEvaluationRunMessage('Evaluation case added.')
+  }
+
+  async function handleUpdateEvaluationCase(
+    datasetId: number,
+    caseId: number,
+    payload: {
+      input: string
+      expected_behavior: string
+      expected_tools: string[] | null
+      expected_sources: string[] | null
+    },
+  ) {
+    if (
+      selectedWorkspaceId === null ||
+      selectedCustomerId === null ||
+      selectedDeploymentId === null
+    ) {
+      return
+    }
+
+    const response = await updateEvaluationCase(
+      selectedWorkspaceId,
+      selectedCustomerId,
+      selectedDeploymentId,
+      datasetId,
+      caseId,
+      payload,
+    )
+
+    setEvaluationDatasets((current) =>
+      current.map((dataset) =>
+        dataset.id === datasetId
+          ? {
+              ...dataset,
+              cases: (dataset.cases ?? []).map((evaluationCase) =>
+                evaluationCase.id === caseId ? response.data : evaluationCase,
+              ),
+            }
+          : dataset,
+      ),
+    )
+    setEvaluationRunMessage('Evaluation case updated.')
+  }
+
+  async function handleDeleteEvaluationCase(datasetId: number, caseId: number) {
+    if (
+      selectedWorkspaceId === null ||
+      selectedCustomerId === null ||
+      selectedDeploymentId === null
+    ) {
+      return
+    }
+
+    await deleteEvaluationCase(
+      selectedWorkspaceId,
+      selectedCustomerId,
+      selectedDeploymentId,
+      datasetId,
+      caseId,
+    )
+
+    setEvaluationDatasets((current) =>
+      current.map((dataset) =>
+        dataset.id === datasetId
+          ? {
+              ...dataset,
+              cases: (dataset.cases ?? []).filter((evaluationCase) => evaluationCase.id !== caseId),
+            }
+          : dataset,
+      ),
+    )
+    setEvaluationRunMessage('Evaluation case deleted.')
   }
 
   async function handleApproveAiAction(actionId: number) {
@@ -777,7 +1304,7 @@ function App() {
 
     setAiActionMessage(null)
     await approveAiAction(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId, actionId)
-    await refreshPendingAiActions()
+    await Promise.all([refreshPendingAiActions(), refreshDeployments()])
     setAiActionMessage('Action approved and executed.')
   }
 
@@ -806,6 +1333,7 @@ function App() {
 
     setCopilotLoading(true)
     setCopilotError(null)
+    setCopilotErrorReference(null)
     setCopilotAnswer(null)
     setCopilotToolsUsed([])
 
@@ -818,10 +1346,13 @@ function App() {
       )
       setCopilotAnswer(response.data.answer)
       setCopilotToolsUsed(response.data.tools_used)
+      await refreshPendingAiActions()
     } catch (error) {
       setCopilotError(error instanceof Error ? error.message : 'Copilot request failed.')
+      setCopilotErrorReference(apiErrorReference(error))
     } finally {
       setCopilotLoading(false)
+      await refreshObservabilityData()
     }
   }
 
@@ -956,6 +1487,7 @@ function App() {
             answer={copilotAnswer}
             toolsUsed={copilotToolsUsed}
             error={copilotError}
+            errorReference={copilotErrorReference}
             loading={copilotLoading}
             onQuestionChange={setCopilotQuestion}
             onSubmit={handleAskCopilot}
@@ -976,12 +1508,23 @@ function App() {
       case 'evals':
         return (
           <EvalsPage
+            workspace={selectedWorkspace}
             deployment={selectedDeployment}
+            datasets={evaluationDatasets}
+            datasetsLoading={evaluationDatasetsLoading}
+            datasetsError={evaluationDatasetsError}
+            selectedDatasetId={evaluationDatasetId}
+            onSelectDataset={setEvaluationDatasetId}
             runs={evaluationRuns}
-            loading={evaluationRunsLoading}
-            error={evaluationRunsError}
-            canRun={evaluationDatasetId !== null}
+            runsLoading={evaluationRunsLoading}
+            runsError={evaluationRunsError}
             runMessage={evaluationRunMessage}
+            onCreateDataset={handleCreateEvaluationDataset}
+            onUpdateDataset={handleUpdateEvaluationDataset}
+            onDeleteDataset={handleDeleteEvaluationDataset}
+            onCreateCase={handleCreateEvaluationCase}
+            onUpdateCase={handleUpdateEvaluationCase}
+            onDeleteCase={handleDeleteEvaluationCase}
             onRun={handleRunEvaluation}
           />
         )
@@ -993,6 +1536,8 @@ function App() {
             loading={pendingAiActionsLoading}
             error={pendingAiActionsError}
             message={aiActionMessage}
+            currentUserId={user?.id ?? null}
+            workspaceRole={selectedWorkspace?.current_user_role}
             onApprove={handleApproveAiAction}
             onReject={handleRejectAiAction}
           />

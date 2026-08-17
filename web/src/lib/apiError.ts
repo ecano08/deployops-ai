@@ -8,8 +8,22 @@ export class ApiValidationError extends Error {
   }
 }
 
+export class ApiError extends Error {
+  reference: string | null
+
+  constructor(message: string, reference: string | null = null) {
+    super(message)
+    this.name = 'ApiError'
+    this.reference = reference
+  }
+}
+
 export function isApiValidationError(error: unknown): error is ApiValidationError {
   return error instanceof ApiValidationError
+}
+
+export function isApiError(error: unknown): error is ApiError {
+  return error instanceof ApiError
 }
 
 export function fieldError(
@@ -17,4 +31,12 @@ export function fieldError(
   field: string,
 ): string | undefined {
   return fieldErrors[field]?.[0]
+}
+
+export function apiErrorReference(error: unknown): string | null {
+  if (error instanceof ApiError && error.reference) {
+    return error.reference
+  }
+
+  return null
 }

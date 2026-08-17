@@ -33,6 +33,7 @@ class CopilotController extends Controller
         } catch (CopilotException $exception) {
             return response()->json([
                 'message' => $exception->getMessage(),
+                'reference' => $exception->reference,
             ], $exception->statusCode);
         }
 

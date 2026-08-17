@@ -8,6 +8,7 @@ import { CustomerFormDialog } from '../forms/CustomerFormDialog'
 import { DeploymentFormDialog } from '../forms/DeploymentFormDialog'
 import { Button } from '../ui/Button'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
+import { ContextActionsMenu } from '../ui/ContextActionsMenu'
 import { FormField } from '../ui/FormField'
 import { Icon } from '../ui/Icon'
 
@@ -78,8 +79,6 @@ export function ContextBar({
   const [deleteDeploymentTarget, setDeleteDeploymentTarget] = useState<Deployment | null>(null)
   const [customerSaving, setCustomerSaving] = useState(false)
   const [deploymentSaving, setDeploymentSaving] = useState(false)
-  const [deletingCustomer, setDeletingCustomer] = useState(false)
-  const [deletingDeployment, setDeletingDeployment] = useState(false)
   const [stageUpdating, setStageUpdating] = useState(false)
 
   async function handleCreateWorkspace(event: React.FormEvent<HTMLFormElement>) {
@@ -144,14 +143,7 @@ export function ContextBar({
       return
     }
 
-    setDeletingCustomer(true)
-
-    try {
-      await onDeleteCustomer(deleteCustomerTarget.id)
-      setDeleteCustomerTarget(null)
-    } finally {
-      setDeletingCustomer(false)
-    }
+    await onDeleteCustomer(deleteCustomerTarget.id)
   }
 
   async function confirmDeleteDeployment() {
@@ -159,14 +151,7 @@ export function ContextBar({
       return
     }
 
-    setDeletingDeployment(true)
-
-    try {
-      await onDeleteDeployment(deleteDeploymentTarget.id)
-      setDeleteDeploymentTarget(null)
-    } finally {
-      setDeletingDeployment(false)
-    }
+    await onDeleteDeployment(deleteDeploymentTarget.id)
   }
 
   async function handleStageChange(stage: DeploymentStage) {
@@ -240,22 +225,22 @@ export function ContextBar({
                 >
                   Create
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setCustomerDialogMode('edit')}
-                  disabled={!selectedCustomer}
-                >
-                  Edit
-                </Button>
-                <Button
-                  variant="danger"
-                  size="sm"
-                  onClick={() => selectedCustomer && setDeleteCustomerTarget(selectedCustomer)}
-                  disabled={!selectedCustomer}
-                >
-                  Delete
-                </Button>
+                {selectedCustomer && (
+                  <ContextActionsMenu
+                    label="Customer actions"
+                    items={[
+                      {
+                        label: 'Edit customer',
+                        onSelect: () => setCustomerDialogMode('edit'),
+                      },
+                      {
+                        label: 'Delete customer',
+                        destructive: true,
+                        onSelect: () => setDeleteCustomerTarget(selectedCustomer),
+                      },
+                    ]}
+                  />
+                )}
               </div>
             )}
           </div>
@@ -306,24 +291,22 @@ export function ContextBar({
                 >
                   Create
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setDeploymentDialogMode('edit')}
-                  disabled={!selectedDeployment}
-                >
-                  Edit
-                </Button>
-                <Button
-                  variant="danger"
-                  size="sm"
-                  onClick={() =>
-                    selectedDeployment && setDeleteDeploymentTarget(selectedDeployment)
-                  }
-                  disabled={!selectedDeployment}
-                >
-                  Delete
-                </Button>
+                {selectedDeployment && (
+                  <ContextActionsMenu
+                    label="Deployment actions"
+                    items={[
+                      {
+                        label: 'Edit deployment',
+                        onSelect: () => setDeploymentDialogMode('edit'),
+                      },
+                      {
+                        label: 'Delete deployment',
+                        destructive: true,
+                        onSelect: () => setDeleteDeploymentTarget(selectedDeployment),
+                      },
+                    ]}
+                  />
+                )}
               </div>
             )}
           </div>
@@ -405,7 +388,6 @@ export function ContextBar({
         title="Delete customer?"
         description={`This will permanently delete "${deleteCustomerTarget?.name}" and all of its deployments.`}
         confirmLabel="Delete customer"
-        loading={deletingCustomer}
         onConfirm={confirmDeleteCustomer}
         onCancel={() => setDeleteCustomerTarget(null)}
       />
@@ -415,7 +397,6 @@ export function ContextBar({
         title="Delete deployment?"
         description={`This will permanently delete "${deleteDeploymentTarget?.name}" and its integrations.`}
         confirmLabel="Delete deployment"
-        loading={deletingDeployment}
         onConfirm={confirmDeleteDeployment}
         onCancel={() => setDeleteDeploymentTarget(null)}
       />

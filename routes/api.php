@@ -108,8 +108,11 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/evaluation-datasets', [EvaluationDatasetController::class, 'index'])->scopeBindings();
     Route::post('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/evaluation-datasets', [EvaluationDatasetController::class, 'store'])->scopeBindings();
     Route::get('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/evaluation-datasets/{evaluation_dataset}', [EvaluationDatasetController::class, 'show'])->scopeBindings();
+    Route::patch('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/evaluation-datasets/{evaluation_dataset}', [EvaluationDatasetController::class, 'update'])->scopeBindings();
     Route::delete('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/evaluation-datasets/{evaluation_dataset}', [EvaluationDatasetController::class, 'destroy'])->scopeBindings();
     Route::post('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/evaluation-datasets/{evaluation_dataset}/cases', [EvaluationDatasetController::class, 'storeCase'])->scopeBindings();
+    Route::patch('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/evaluation-datasets/{evaluation_dataset}/cases/{evaluation_case}', [EvaluationDatasetController::class, 'updateCase'])->scopeBindings();
+    Route::delete('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/evaluation-datasets/{evaluation_dataset}/cases/{evaluation_case}', [EvaluationDatasetController::class, 'destroyCase'])->scopeBindings();
     Route::get('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/evaluation-runs', [EvaluationRunController::class, 'index'])->scopeBindings();
     Route::post('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/evaluation-datasets/{evaluation_dataset}/runs', [EvaluationRunController::class, 'store'])->scopeBindings();
     Route::get('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/evaluation-runs/{evaluation_run}', [EvaluationRunController::class, 'show'])->scopeBindings();

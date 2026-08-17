@@ -20,6 +20,17 @@ enum AiActionType: string
 
     /**
      * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    public function normalizePayload(array $payload): array
+    {
+        return match ($this) {
+            self::UpdateDeploymentStage => $this->normalizeUpdateDeploymentStagePayload($payload),
+        };
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
      */
     private function validateUpdateDeploymentStagePayload(array $payload): void
     {
@@ -30,5 +41,16 @@ enum AiActionType: string
                 'payload.stage' => 'A valid deployment stage is required.',
             ]);
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, string>
+     */
+    private function normalizeUpdateDeploymentStagePayload(array $payload): array
+    {
+        return [
+            'stage' => (string) $payload['stage'],
+        ];
     }
 }

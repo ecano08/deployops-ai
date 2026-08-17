@@ -58,6 +58,19 @@ class Workspace extends Model
         return $user->roleIn($this);
     }
 
+    public function includesUser(User $user): bool
+    {
+        if ($this->owner_id === $user->id) {
+            return true;
+        }
+
+        if ($this->relationLoaded('members')) {
+            return $this->members->contains('id', $user->id);
+        }
+
+        return $this->members()->whereKey($user->id)->exists();
+    }
+
     public static function uniqueSlugFor(string $name): string
     {
         $base = Str::slug($name);

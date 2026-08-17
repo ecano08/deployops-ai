@@ -16,6 +16,7 @@ type CopilotPageProps = {
   answer: string | null
   toolsUsed: string[]
   error: string | null
+  errorReference?: string | null
   loading: boolean
   onQuestionChange: (value: string) => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>
@@ -27,6 +28,7 @@ export function CopilotPage({
   answer,
   toolsUsed,
   error,
+  errorReference = null,
   loading,
   onQuestionChange,
   onSubmit,
@@ -108,7 +110,16 @@ export function CopilotPage({
           </Button>
         </form>
 
-        {error && <Alert variant="error">{error}</Alert>}
+        {error && (
+          <Alert variant="error">
+            <div className="alert__stack">
+              <span>{error}</span>
+              {errorReference && (
+                <span className="alert__meta">Error reference: #{errorReference}</span>
+              )}
+            </div>
+          </Alert>
+        )}
       </Card>
 
       {answer && (

@@ -26,7 +26,11 @@ import type {
   Workspace,
   WorkspaceMember,
 } from '../types'
-import { DEPLOYMENT_STAGES } from '../types'
+import {
+  formatAiActionStatus,
+  presentAiProposedAction,
+} from '../lib/aiActionPresentation'
+import { DEPLOYMENT_STAGES, aiActionRequesterLabel } from '../types'
 
 type DashboardPageProps = {
   workspace: Workspace | null
@@ -206,20 +210,33 @@ export function DashboardPage({
               />
             ) : (
               <ul className="activity-list">
-                {recentApprovals.map((action) => (
+                {recentApprovals.map((action) => {
+                  const presentation = presentAiProposedAction(action, {
+                    currentDeploymentStage: deployment?.stage ?? null,
+                  })
+
+                  return (
                   <li key={action.id} className="activity-list__item">
                     <span className="activity-list__icon">
                       <Icon icon={CheckSquare} size="xs" />
                     </span>
                     <div className="activity-list__content">
-                      <p className="activity-list__title">{action.action_type}</p>
+                      <p className="activity-list__title">{presentation.title}</p>
                       <p className="activity-list__meta">
-                        <Badge variant="warning">{action.status}</Badge>
-                        {' · '}User #{action.requested_by}
+                        {presentation.subtitle && (
+                          <>
+                            {presentation.subtitle}
+                            {' · '}
+                          </>
+                        )}
+                        <Badge variant="warning">{formatAiActionStatus(action.status)}</Badge>
+                        {' · '}
+                        {aiActionRequesterLabel(action.requested_by)}
                       </p>
                     </div>
                   </li>
-                ))}
+                  )
+                })}
                 {pendingActions.length > 3 && (
                   <p className="data-list__meta">+{pendingActions.length - 3} more pending</p>
                 )}

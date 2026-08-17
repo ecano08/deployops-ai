@@ -1,5 +1,6 @@
 import { useId, useState, type FormEvent } from 'react'
 import { fieldError, isApiValidationError } from '../../lib/apiError'
+import { required } from '../../lib/validation'
 import type { Customer } from '../../types'
 import { FormDialog } from '../ui/FormDialog'
 import { FormField, FormInput, FormTextarea } from '../ui/FormField'
@@ -28,6 +29,18 @@ export function CustomerFormDialog({
     event.preventDefault()
     setFieldErrors({})
     setFormError(null)
+
+    const nextFieldErrors: Record<string, string[]> = {}
+    const nameError = required(name, 'Name')
+
+    if (nameError) {
+      nextFieldErrors.name = [nameError]
+    }
+
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setFieldErrors(nextFieldErrors)
+      return
+    }
 
     try {
       await onSubmit({
@@ -64,8 +77,16 @@ export function CustomerFormDialog({
         <FormInput
           id={nameId}
           value={name}
-          onChange={(event) => setName(event.target.value)}
-          required
+          onChange={(event) => {
+            setName(event.target.value)
+            if (fieldErrors.name) {
+              setFieldErrors((current) => {
+                const next = { ...current }
+                delete next.name
+                return next
+              })
+            }
+          }}
           autoFocus
         />
       </FormField>
@@ -78,7 +99,16 @@ export function CustomerFormDialog({
         <FormTextarea
           id={descriptionId}
           value={description}
-          onChange={(event) => setDescription(event.target.value)}
+          onChange={(event) => {
+            setDescription(event.target.value)
+            if (fieldErrors.description) {
+              setFieldErrors((current) => {
+                const next = { ...current }
+                delete next.description
+                return next
+              })
+            }
+          }}
           rows={3}
         />
       </FormField>
