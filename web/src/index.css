@@ -611,6 +611,23 @@ button {
   }
 }
 
+.context-bar__group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: flex-end;
+  flex: 1;
+  min-width: 180px;
+}
+
+.context-bar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  padding-bottom: 0.1rem;
+}
+
 .context-bar__create-field {
   flex: 1;
   min-width: 0;
@@ -876,6 +893,13 @@ button {
   line-height: var(--leading-relaxed);
 }
 
+.state__action,
+.state__hint {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  max-width: 360px;
+}
+
 .state--error .state__title {
   color: var(--danger);
 }
@@ -1025,6 +1049,10 @@ button {
   width: 100%;
 }
 
+.dialog--form {
+  max-width: 480px;
+}
+
 .dialog__title {
   font-size: var(--text-lg);
   margin-bottom: var(--space-2);
@@ -1155,6 +1183,54 @@ button {
 
 .form__submit {
   align-self: flex-start;
+}
+
+.form__error {
+  color: var(--danger);
+  font-size: var(--text-sm);
+}
+
+.form-field__hint {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-weight: 400;
+  line-height: var(--leading-normal);
+}
+
+.form-field__control {
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text-h);
+  font-size: var(--text-sm);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.form-field__control:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+
+.form-field__control:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-bg);
+}
+
+.form-field__control:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.form-field--error .form-field__control,
+.form-field--invalid .form-field__control {
+  border-color: rgba(248, 113, 113, 0.55);
+}
+
+.form-field--error .form-field__control:focus,
+.form-field--invalid .form-field__control:focus {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px var(--danger-bg);
 }
 
 /* ── Auth page ─────────────────────────────────────────────────── */
@@ -1434,6 +1510,14 @@ button {
   align-items: center;
   gap: var(--space-2);
   flex-wrap: wrap;
+}
+
+.data-list__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: flex-end;
 }
 
 .data-list__meta {

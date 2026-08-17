@@ -1,19 +1,26 @@
+import { ApiValidationError } from './lib/apiError'
 import type {
   AiHealthSummaryResponse,
   AiProposedActionListResponse,
   AiTraceListResponse,
   AuthResponse,
   CopilotResponse,
+  CreateIntegrationPayload,
   CustomerListResponse,
+  CustomerResponse,
   DeploymentListResponse,
+  DeploymentResponse,
+  DeploymentStage,
   EvaluationDatasetListResponse,
   EvaluationRunListResponse,
   EvaluationRunResponse,
   IncidentListResponse,
   IntegrationListResponse,
+  IntegrationResponse,
   IntegrationTestResponse,
   KnowledgeDocumentListResponse,
   KnowledgeDocumentResponse,
+  UpdateIntegrationPayload,
   UserResponse,
   WorkspaceListResponse,
   WorkspaceMemberListResponse,
@@ -22,9 +29,24 @@ import type {
 
 const TOKEN_KEY = 'deployops_token'
 
-type ApiError = {
+type ApiErrorPayload = {
   message?: string
   errors?: Record<string, string[]>
+}
+
+function throwApiError(payload: ApiErrorPayload, status: number): never {
+  const firstError = payload.errors
+    ? Object.values(payload.errors)[0]?.[0]
+    : undefined
+
+  if (payload.errors) {
+    throw new ApiValidationError(
+      firstError ?? payload.message ?? `HTTP ${status}`,
+      payload.errors,
+    )
+  }
+
+  throw new Error(firstError ?? payload.message ?? `HTTP ${status}`)
 }
 
 export function getToken(): string | null {
@@ -58,14 +80,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     headers,
   })
 
-  const payload = (await response.json().catch(() => ({}))) as ApiError & T
+  const payload = (await response.json().catch(() => ({}))) as ApiErrorPayload & T
 
   if (!response.ok) {
-    const firstError = payload.errors
-      ? Object.values(payload.errors)[0]?.[0]
-      : undefined
-
-    throw new Error(firstError ?? payload.message ?? `HTTP ${response.status}`)
+    throwApiError(payload, response.status)
   }
 
   return payload
@@ -117,9 +135,91 @@ export function fetchCustomers(workspaceId: number) {
   return request<CustomerListResponse>(`/api/workspaces/${workspaceId}/customers`)
 }
 
+export function createCustomer(
+  workspaceId: number,
+  payload: { name: string; description?: string | null },
+) {
+  return request<CustomerResponse>(`/api/workspaces/${workspaceId}/customers`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function updateCustomer(
+  workspaceId: number,
+  customerId: number,
+  payload: { name?: string; description?: string | null },
+) {
+  return request<CustomerResponse>(`/api/workspaces/${workspaceId}/customers/${customerId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function deleteCustomer(workspaceId: number, customerId: number) {
+  return request<void>(`/api/workspaces/${workspaceId}/customers/${customerId}`, {
+    method: 'DELETE',
+  })
+}
+
 export function fetchDeployments(workspaceId: number, customerId: number) {
   return request<DeploymentListResponse>(
     `/api/workspaces/${workspaceId}/customers/${customerId}/deployments`,
+  )
+}
+
+export function createDeployment(
+  workspaceId: number,
+  customerId: number,
+  payload: { name: string; description?: string | null; stage?: DeploymentStage },
+) {
+  return request<DeploymentResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  )
+}
+
+export function updateDeployment(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+  payload: { name?: string; description?: string | null },
+) {
+  return request<DeploymentResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    },
+  )
+}
+
+export function updateDeploymentStage(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+  stage: DeploymentStage,
+) {
+  return request<DeploymentResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/stage`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ stage }),
+    },
+  )
+}
+
+export function deleteDeployment(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+) {
+  return request<void>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}`,
+    { method: 'DELETE' },
   )
 }
 
@@ -130,6 +230,49 @@ export function fetchIntegrations(
 ) {
   return request<IntegrationListResponse>(
     `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/integrations`,
+  )
+}
+
+export function createIntegration(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+  payload: CreateIntegrationPayload,
+) {
+  return request<IntegrationResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/integrations`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  )
+}
+
+export function updateIntegration(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+  integrationId: number,
+  payload: UpdateIntegrationPayload,
+) {
+  return request<IntegrationResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/integrations/${integrationId}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    },
+  )
+}
+
+export function deleteIntegration(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+  integrationId: number,
+) {
+  return request<void>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/integrations/${integrationId}`,
+    { method: 'DELETE' },
   )
 }
 

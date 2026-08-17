@@ -3,7 +3,7 @@ import { ContextBar } from './ContextBar'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
 import { PageHeader } from '../ui/PageHeader'
-import type { Customer, Deployment, Workspace } from '../../types'
+import type { Customer, Deployment, DeploymentStage, Workspace } from '../../types'
 
 type AppLayoutProps = {
   activeView: AppView
@@ -26,6 +26,23 @@ type AppLayoutProps = {
   onCustomerChange: (id: number) => void
   onDeploymentChange: (id: number) => void
   onCreateWorkspace: (name: string) => Promise<void>
+  onCreateCustomer: (payload: { name: string; description: string | null }) => Promise<void>
+  onUpdateCustomer: (
+    customerId: number,
+    payload: { name: string; description: string | null },
+  ) => Promise<void>
+  onDeleteCustomer: (customerId: number) => Promise<void>
+  onCreateDeployment: (payload: {
+    name: string
+    description: string | null
+    stage: DeploymentStage
+  }) => Promise<void>
+  onUpdateDeployment: (
+    deploymentId: number,
+    payload: { name: string; description: string | null; stage: DeploymentStage },
+  ) => Promise<void>
+  onUpdateDeploymentStage: (deploymentId: number, stage: DeploymentStage) => Promise<void>
+  onDeleteDeployment: (deploymentId: number) => Promise<void>
   pendingApprovals: number
   children: React.ReactNode
 }
@@ -82,6 +99,13 @@ export function AppLayout({
   onCustomerChange,
   onDeploymentChange,
   onCreateWorkspace,
+  onCreateCustomer,
+  onUpdateCustomer,
+  onDeleteCustomer,
+  onCreateDeployment,
+  onUpdateDeployment,
+  onUpdateDeploymentStage,
+  onDeleteDeployment,
   pendingApprovals,
   children,
 }: AppLayoutProps) {
@@ -118,6 +142,13 @@ export function AppLayout({
           onCustomerChange={onCustomerChange}
           onDeploymentChange={onDeploymentChange}
           onCreateWorkspace={onCreateWorkspace}
+          onCreateCustomer={onCreateCustomer}
+          onUpdateCustomer={onUpdateCustomer}
+          onDeleteCustomer={onDeleteCustomer}
+          onCreateDeployment={onCreateDeployment}
+          onUpdateDeployment={onUpdateDeployment}
+          onUpdateDeploymentStage={onUpdateDeploymentStage}
+          onDeleteDeployment={onDeleteDeployment}
         />
 
         <main className="app-content">

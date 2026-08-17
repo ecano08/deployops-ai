@@ -84,6 +84,10 @@ export type DeploymentListResponse = {
   data: Deployment[]
 }
 
+export type DeploymentResponse = {
+  data: Deployment
+}
+
 export type IntegrationType = 'rest_api' | 'webhook'
 
 export type IntegrationStatus = 'disconnected' | 'connected' | 'error'
@@ -104,6 +108,27 @@ export type DeploymentIntegration = {
 
 export type IntegrationListResponse = {
   data: DeploymentIntegration[]
+}
+
+export type IntegrationResponse = {
+  data: DeploymentIntegration
+}
+
+export type CreateIntegrationPayload = {
+  type: IntegrationType
+  name: string
+  base_url?: string | null
+  endpoint?: string | null
+  api_key?: string
+  webhook_secret?: string
+}
+
+export type UpdateIntegrationPayload = {
+  name?: string
+  base_url?: string | null
+  endpoint?: string | null
+  api_key?: string | null
+  webhook_secret?: string | null
 }
 
 export type IntegrationTestResponse = {

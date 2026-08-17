@@ -3,7 +3,13 @@ import {
   approveAiAction,
   askCopilot,
   clearToken,
+  createCustomer,
+  createDeployment,
+  createIntegration,
   createWorkspace,
+  deleteCustomer,
+  deleteDeployment,
+  deleteIntegration,
   deleteKnowledgeDocument,
   fetchAiHealth,
   fetchAiTraces,
@@ -23,11 +29,17 @@ import {
   rejectAiAction,
   runEvaluationDataset,
   testIntegration,
+  updateCustomer,
+  updateDeployment,
+  updateDeploymentStage,
+  updateIntegration,
   uploadKnowledgeDocument,
 } from './api'
 import { AppLayout } from './components/layout/AppLayout'
 import type { AppView } from './components/layout/Sidebar'
+import { EmptyState } from './components/ui/EmptyState'
 import { LoadingState } from './components/ui/LoadingState'
+import { canManageCustomers, canManageDeployments } from './lib/permissions'
 import { ApprovalsPage } from './pages/ApprovalsPage'
 import { AuthPage } from './pages/AuthPage'
 import { CopilotPage } from './pages/CopilotPage'
@@ -43,6 +55,7 @@ import type {
   Customer,
   Deployment,
   DeploymentIntegration,
+  DeploymentStage,
   EvaluationRun,
   Incident,
   KnowledgeDocument,
@@ -505,6 +518,217 @@ function App() {
     selectWorkspace(response.data.id)
   }
 
+  async function handleCreateCustomer(payload: { name: string; description: string | null }) {
+    if (selectedWorkspaceId === null) {
+      return
+    }
+
+    setAppError(null)
+    const response = await createCustomer(selectedWorkspaceId, payload)
+    setCustomers((current) =>
+      [...current, response.data].sort((left, right) => left.name.localeCompare(right.name)),
+    )
+    selectCustomer(response.data.id)
+  }
+
+  async function handleUpdateCustomer(
+    customerId: number,
+    payload: { name: string; description: string | null },
+  ) {
+    if (selectedWorkspaceId === null) {
+      return
+    }
+
+    setAppError(null)
+    const response = await updateCustomer(selectedWorkspaceId, customerId, payload)
+    setCustomers((current) =>
+      current
+        .map((customer) => (customer.id === customerId ? response.data : customer))
+        .sort((left, right) => left.name.localeCompare(right.name)),
+    )
+  }
+
+  async function handleDeleteCustomer(customerId: number) {
+    if (selectedWorkspaceId === null) {
+      return
+    }
+
+    setAppError(null)
+    await deleteCustomer(selectedWorkspaceId, customerId)
+
+    const remaining = customers.filter((customer) => customer.id !== customerId)
+    setCustomers(remaining)
+
+    if (selectedCustomerId === customerId) {
+      if (remaining.length > 0) {
+        selectCustomer(remaining[0].id)
+      } else {
+        setSelectedCustomerId(null)
+        setDeployments([])
+        setDeploymentsError(null)
+        setDeploymentsLoading(false)
+        setSelectedDeploymentId(null)
+        resetDeploymentState()
+      }
+    }
+  }
+
+  async function handleCreateDeployment(payload: {
+    name: string
+    description: string | null
+    stage: DeploymentStage
+  }) {
+    if (selectedWorkspaceId === null || selectedCustomerId === null) {
+      return
+    }
+
+    setAppError(null)
+    const response = await createDeployment(selectedWorkspaceId, selectedCustomerId, payload)
+    setDeployments((current) =>
+      [...current, response.data].sort((left, right) => left.name.localeCompare(right.name)),
+    )
+    selectDeployment(response.data.id)
+  }
+
+  async function handleUpdateDeployment(
+    deploymentId: number,
+    payload: { name: string; description: string | null; stage: DeploymentStage },
+  ) {
+    if (selectedWorkspaceId === null || selectedCustomerId === null) {
+      return
+    }
+
+    setAppError(null)
+
+    const response = await updateDeployment(selectedWorkspaceId, selectedCustomerId, deploymentId, {
+      name: payload.name,
+      description: payload.description,
+    })
+
+    let updatedDeployment = response.data
+
+    if (payload.stage !== response.data.stage) {
+      const stageResponse = await updateDeploymentStage(
+        selectedWorkspaceId,
+        selectedCustomerId,
+        deploymentId,
+        payload.stage,
+      )
+      updatedDeployment = stageResponse.data
+    }
+
+    setDeployments((current) =>
+      current
+        .map((deployment) => (deployment.id === deploymentId ? updatedDeployment : deployment))
+        .sort((left, right) => left.name.localeCompare(right.name)),
+    )
+  }
+
+  async function handleUpdateDeploymentStage(deploymentId: number, stage: DeploymentStage) {
+    if (selectedWorkspaceId === null || selectedCustomerId === null) {
+      return
+    }
+
+    setAppError(null)
+    const response = await updateDeploymentStage(
+      selectedWorkspaceId,
+      selectedCustomerId,
+      deploymentId,
+      stage,
+    )
+    setDeployments((current) =>
+      current.map((deployment) => (deployment.id === deploymentId ? response.data : deployment)),
+    )
+  }
+
+  async function handleDeleteDeployment(deploymentId: number) {
+    if (selectedWorkspaceId === null || selectedCustomerId === null) {
+      return
+    }
+
+    setAppError(null)
+    await deleteDeployment(selectedWorkspaceId, selectedCustomerId, deploymentId)
+
+    const remaining = deployments.filter((deployment) => deployment.id !== deploymentId)
+    setDeployments(remaining)
+
+    if (selectedDeploymentId === deploymentId) {
+      if (remaining.length > 0) {
+        selectDeployment(remaining[0].id)
+      } else {
+        setSelectedDeploymentId(null)
+        resetDeploymentState()
+      }
+    }
+  }
+
+  async function handleCreateIntegration(payload: {
+    type: 'rest_api' | 'webhook'
+    name: string
+    base_url?: string | null
+    endpoint?: string | null
+    api_key?: string
+    webhook_secret?: string
+  }) {
+    if (selectedWorkspaceId === null || selectedCustomerId === null || selectedDeploymentId === null) {
+      return
+    }
+
+    setIntegrationsError(null)
+    const response = await createIntegration(
+      selectedWorkspaceId,
+      selectedCustomerId,
+      selectedDeploymentId,
+      payload,
+    )
+    setIntegrations((current) =>
+      [...current, response.data].sort((left, right) => left.name.localeCompare(right.name)),
+    )
+  }
+
+  async function handleUpdateIntegration(
+    integrationId: number,
+    payload: {
+      name: string
+      base_url?: string | null
+      endpoint?: string | null
+      api_key?: string
+      webhook_secret?: string
+    },
+  ) {
+    if (selectedWorkspaceId === null || selectedCustomerId === null || selectedDeploymentId === null) {
+      return
+    }
+
+    setIntegrationsError(null)
+    const response = await updateIntegration(
+      selectedWorkspaceId,
+      selectedCustomerId,
+      selectedDeploymentId,
+      integrationId,
+      payload,
+    )
+    setIntegrations((current) =>
+      current.map((integration) => (integration.id === integrationId ? response.data : integration)),
+    )
+  }
+
+  async function handleDeleteIntegration(integrationId: number) {
+    if (selectedWorkspaceId === null || selectedCustomerId === null || selectedDeploymentId === null) {
+      return
+    }
+
+    setIntegrationsError(null)
+    await deleteIntegration(
+      selectedWorkspaceId,
+      selectedCustomerId,
+      selectedDeploymentId,
+      integrationId,
+    )
+    setIntegrations((current) => current.filter((integration) => integration.id !== integrationId))
+    setIntegrationTestMessage(null)
+  }
+
   async function handleRunEvaluation() {
     if (
       selectedWorkspaceId === null ||
@@ -712,11 +936,15 @@ function App() {
       case 'integrations':
         return (
           <IntegrationsPage
+            workspace={selectedWorkspace}
             deployment={selectedDeployment}
             integrations={integrations}
             loading={integrationsLoading}
             error={integrationsError}
             testMessage={integrationTestMessage}
+            onCreate={handleCreateIntegration}
+            onUpdate={handleUpdateIntegration}
+            onDelete={handleDeleteIntegration}
             onTest={handleTestIntegration}
           />
         )
@@ -789,6 +1017,56 @@ function App() {
     }
   }
 
+  function renderContextEmptyState() {
+    if (customersLoading || deploymentsLoading) {
+      return <LoadingState label="Loading context…" />
+    }
+
+    if (customersError) {
+      return <p role="alert">{customersError}</p>
+    }
+
+    if (selectedWorkspace && customers.length === 0) {
+      return (
+        <EmptyState
+          title="No customers yet"
+          description="Create a customer to start managing deployments and integrations."
+          action={
+            canManageCustomers(selectedWorkspace.current_user_role) ? (
+              <p className="state__hint">Use the Create button in the customer context bar above.</p>
+            ) : (
+              <p className="state__hint">Ask a workspace admin to create a customer.</p>
+            )
+          }
+        />
+      )
+    }
+
+    if (deploymentsError) {
+      return <p role="alert">{deploymentsError}</p>
+    }
+
+    if (selectedCustomer && deployments.length === 0 && activeView !== 'dashboard') {
+      return (
+        <EmptyState
+          title="No deployments yet"
+          description="Create a deployment to connect integrations, knowledge, and copilot workflows."
+          action={
+            canManageDeployments(selectedWorkspace?.current_user_role) ? (
+              <p className="state__hint">Use the Create button in the deployment context bar above.</p>
+            ) : (
+              <p className="state__hint">Ask an engineer or admin to create a deployment.</p>
+            )
+          }
+        />
+      )
+    }
+
+    return null
+  }
+
+  const contextEmptyState = renderContextEmptyState()
+
   if (loadingUser) {
     return (
       <div className="auth-page">
@@ -823,6 +1101,13 @@ function App() {
       onCustomerChange={selectCustomer}
       onDeploymentChange={selectDeployment}
       onCreateWorkspace={handleCreateWorkspace}
+      onCreateCustomer={handleCreateCustomer}
+      onUpdateCustomer={handleUpdateCustomer}
+      onDeleteCustomer={handleDeleteCustomer}
+      onCreateDeployment={handleCreateDeployment}
+      onUpdateDeployment={handleUpdateDeployment}
+      onUpdateDeploymentStage={handleUpdateDeploymentStage}
+      onDeleteDeployment={handleDeleteDeployment}
       pendingApprovals={pendingAiActions.length}
     >
       {appError && (
@@ -830,20 +1115,7 @@ function App() {
           {appError}
         </div>
       )}
-      {(customersLoading || deploymentsLoading) && activeView === 'dashboard' && (
-        <LoadingState label="Loading context…" />
-      )}
-      {customersError && (
-        <div className="app-alert" role="alert">
-          {customersError}
-        </div>
-      )}
-      {deploymentsError && (
-        <div className="app-alert" role="alert">
-          {deploymentsError}
-        </div>
-      )}
-      {renderView()}
+      {contextEmptyState ?? renderView()}
     </AppLayout>
   )
 }
