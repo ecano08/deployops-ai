@@ -83,3 +83,34 @@ export type CustomerResponse = {
 export type DeploymentListResponse = {
   data: Deployment[]
 }
+
+export type IntegrationType = 'rest_api' | 'webhook'
+
+export type IntegrationStatus = 'disconnected' | 'connected' | 'error'
+
+export type DeploymentIntegration = {
+  id: number
+  workspace_id: number
+  deployment_id: number
+  type: IntegrationType
+  name: string
+  base_url: string | null
+  endpoint: string | null
+  status: IntegrationStatus
+  config: Record<string, unknown> | null
+  has_api_key: boolean
+  has_webhook_secret: boolean
+}
+
+export type IntegrationListResponse = {
+  data: DeploymentIntegration[]
+}
+
+export type IntegrationTestResponse = {
+  data: {
+    success: boolean
+    status: IntegrationStatus
+    metadata: Record<string, unknown>
+    message: string | null
+  }
+}

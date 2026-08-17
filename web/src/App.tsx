@@ -5,15 +5,17 @@ import {
   fetchCurrentUser,
   fetchCustomers,
   fetchDeployments,
+  fetchIntegrations,
   fetchWorkspaceMembers,
   fetchWorkspaces,
   getToken,
   login,
   logout,
   register,
+  testIntegration,
   setToken,
 } from './api'
-import type { Customer, Deployment, User, Workspace, WorkspaceMember } from './types'
+import type { Customer, Deployment, DeploymentIntegration, User, Workspace, WorkspaceMember } from './types'
 import { DEPLOYMENT_STAGES } from './types'
 
 type HealthResponse = {
@@ -41,6 +43,11 @@ function App() {
   const [deployments, setDeployments] = useState<Deployment[]>([])
   const [deploymentsError, setDeploymentsError] = useState<string | null>(null)
   const [deploymentsLoading, setDeploymentsLoading] = useState(false)
+  const [selectedDeploymentId, setSelectedDeploymentId] = useState<number | null>(null)
+  const [integrations, setIntegrations] = useState<DeploymentIntegration[]>([])
+  const [integrationsError, setIntegrationsError] = useState<string | null>(null)
+  const [integrationsLoading, setIntegrationsLoading] = useState(false)
+  const [integrationTestMessage, setIntegrationTestMessage] = useState<string | null>(null)
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -51,6 +58,7 @@ function App() {
   const [loadingUser, setLoadingUser] = useState(() => Boolean(getToken()))
   const selectedWorkspace = workspaces.find((workspace) => workspace.id === selectedWorkspaceId) ?? null
   const selectedCustomer = customers.find((customer) => customer.id === selectedCustomerId) ?? null
+  const selectedDeployment = deployments.find((deployment) => deployment.id === selectedDeploymentId) ?? null
   const deploymentsByStage = DEPLOYMENT_STAGES.reduce<Record<string, Deployment[]>>((groups, stage) => {
     groups[stage] = deployments.filter((deployment) => deployment.stage === stage)
     return groups
@@ -186,6 +194,37 @@ function App() {
     }
   }, [user, selectedWorkspaceId, selectedCustomerId])
 
+  useEffect(() => {
+    if (!user || selectedWorkspaceId === null || selectedCustomerId === null || selectedDeploymentId === null) {
+      return
+    }
+
+    let cancelled = false
+
+    fetchIntegrations(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId)
+      .then((response) => {
+        if (!cancelled) {
+          setIntegrations(response.data)
+          setIntegrationsError(null)
+        }
+      })
+      .catch((error: Error) => {
+        if (!cancelled) {
+          setIntegrations([])
+          setIntegrationsError(error.message)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIntegrationsLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [user, selectedWorkspaceId, selectedCustomerId, selectedDeploymentId])
+
   function selectWorkspace(workspaceId: number) {
     setSelectedWorkspaceId(workspaceId)
     setSelectedCustomerId(null)
@@ -198,6 +237,11 @@ function App() {
     setDeployments([])
     setDeploymentsError(null)
     setDeploymentsLoading(false)
+    setSelectedDeploymentId(null)
+    setIntegrations([])
+    setIntegrationsError(null)
+    setIntegrationsLoading(false)
+    setIntegrationTestMessage(null)
   }
 
   function selectCustomer(customerId: number) {
@@ -205,6 +249,49 @@ function App() {
     setDeployments([])
     setDeploymentsError(null)
     setDeploymentsLoading(true)
+    setSelectedDeploymentId(null)
+    setIntegrations([])
+    setIntegrationsError(null)
+    setIntegrationsLoading(false)
+    setIntegrationTestMessage(null)
+  }
+
+  function selectDeployment(deploymentId: number) {
+    setSelectedDeploymentId(deploymentId)
+    setIntegrations([])
+    setIntegrationsError(null)
+    setIntegrationsLoading(true)
+    setIntegrationTestMessage(null)
+  }
+
+  async function handleTestIntegration(integrationId: number) {
+    if (selectedWorkspaceId === null || selectedCustomerId === null || selectedDeploymentId === null) {
+      return
+    }
+
+    setIntegrationTestMessage(null)
+
+    try {
+      const response = await testIntegration(
+        selectedWorkspaceId,
+        selectedCustomerId,
+        selectedDeploymentId,
+        integrationId,
+      )
+      setIntegrationTestMessage(
+        response.data.success
+          ? `Connection test succeeded (${response.data.status}).`
+          : `Connection test failed (${response.data.status}).`,
+      )
+      const refreshed = await fetchIntegrations(
+        selectedWorkspaceId,
+        selectedCustomerId,
+        selectedDeploymentId,
+      )
+      setIntegrations(refreshed.data)
+    } catch (error) {
+      setIntegrationTestMessage(error instanceof Error ? error.message : 'Connection test failed.')
+    }
   }
 
   async function handleAuth(event: FormEvent<HTMLFormElement>) {
@@ -247,6 +334,11 @@ function App() {
     setDeployments([])
     setDeploymentsError(null)
     setDeploymentsLoading(false)
+    setSelectedDeploymentId(null)
+    setIntegrations([])
+    setIntegrationsError(null)
+    setIntegrationsLoading(false)
+    setIntegrationTestMessage(null)
   }
 
   async function handleCreateWorkspace(event: FormEvent<HTMLFormElement>) {
@@ -455,8 +547,14 @@ function App() {
                             <ul>
                               {deploymentsByStage[stage].map((deployment) => (
                                 <li key={deployment.id}>
-                                  {deployment.name}
-                                  {deployment.description ? ` — ${deployment.description}` : ''}
+                                  <button
+                                    type="button"
+                                    aria-pressed={deployment.id === selectedDeploymentId}
+                                    onClick={() => selectDeployment(deployment.id)}
+                                  >
+                                    {deployment.name}
+                                    {deployment.description ? ` — ${deployment.description}` : ''}
+                                  </button>
                                 </li>
                               ))}
                             </ul>
@@ -466,6 +564,32 @@ function App() {
                         </section>
                       ))}
                     </div>
+                  )}
+                  {selectedDeployment && (
+                    <section>
+                      <h2>Integrations — {selectedDeployment.name}</h2>
+                      {integrationsLoading && <p>Loading integrations...</p>}
+                      {integrationsError && <p>{integrationsError}</p>}
+                      {integrationTestMessage && <p>{integrationTestMessage}</p>}
+                      {!integrationsLoading && integrations.length === 0 && !integrationsError && (
+                        <p>No integrations yet.</p>
+                      )}
+                      {!integrationsLoading && integrations.length > 0 && (
+                        <ul>
+                          {integrations.map((integration) => (
+                            <li key={integration.id}>
+                              {integration.name} ({integration.type}) — {integration.status}
+                              <button
+                                type="button"
+                                onClick={() => handleTestIntegration(integration.id)}
+                              >
+                                Test connection
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </section>
                   )}
                 </section>
               )}
