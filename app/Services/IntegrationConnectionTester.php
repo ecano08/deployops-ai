@@ -16,7 +16,10 @@ class IntegrationConnectionTester
 
     private const int CONNECT_TIMEOUT_SECONDS = 3;
 
-    public function __construct(private IntegrationOutboundUrlValidator $urlValidator) {}
+    public function __construct(
+        private IntegrationOutboundUrlValidator $urlValidator,
+        private IncidentService $incidentService,
+    ) {}
 
     /**
      * @return array{success: bool, status: IntegrationStatus, metadata: array<string, mixed>, message: ?string}
@@ -171,6 +174,10 @@ class IntegrationConnectionTester
         $integration->update(['status' => IntegrationStatus::Error]);
 
         $this->logActivity($integration, $type, 'failure', $metadata, $message);
+
+        if ($message !== null) {
+            $this->incidentService->createFromIntegrationFailure($integration, $message, $metadata);
+        }
 
         return [
             'success' => false,

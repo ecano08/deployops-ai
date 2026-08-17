@@ -1,6 +1,8 @@
 <?php
 
+use App\Http\Controllers\AiHealthController;
 use App\Http\Controllers\AiProposedActionController;
+use App\Http\Controllers\AiTraceController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CopilotController;
 use App\Http\Controllers\CustomerController;
@@ -8,6 +10,7 @@ use App\Http\Controllers\DeploymentController;
 use App\Http\Controllers\DeploymentIntegrationController;
 use App\Http\Controllers\EvaluationDatasetController;
 use App\Http\Controllers\EvaluationRunController;
+use App\Http\Controllers\IncidentController;
 use App\Http\Controllers\IntegrationActivityController;
 use App\Http\Controllers\IntegrationWebhookController;
 use App\Http\Controllers\KnowledgeDocumentController;
@@ -91,6 +94,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/copilot', [CopilotController::class, 'store'])
         ->middleware('throttle:copilot')
         ->scopeBindings();
+    Route::get('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/ai-health', [AiHealthController::class, 'show'])->scopeBindings();
+    Route::get('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/ai-traces', [AiTraceController::class, 'index'])->scopeBindings();
+    Route::get('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/ai-traces/{copilot_request_log}', [AiTraceController::class, 'show'])->scopeBindings();
+    Route::get('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/incidents', [IncidentController::class, 'index'])->scopeBindings();
+    Route::post('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/incidents', [IncidentController::class, 'store'])->scopeBindings();
+    Route::get('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/incidents/{incident}', [IncidentController::class, 'show'])->scopeBindings();
+    Route::patch('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/incidents/{incident}', [IncidentController::class, 'update'])->scopeBindings();
     Route::get('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/knowledge-documents', [KnowledgeDocumentController::class, 'index'])->scopeBindings();
     Route::post('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/knowledge-documents', [KnowledgeDocumentController::class, 'store'])->scopeBindings();
     Route::get('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/knowledge-documents/{knowledge_document}', [KnowledgeDocumentController::class, 'show'])->scopeBindings();

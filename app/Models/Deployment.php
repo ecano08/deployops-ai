@@ -83,4 +83,20 @@ class Deployment extends Model
     {
         return $this->hasMany(AiProposedAction::class);
     }
+
+    /**
+     * @return HasMany<CopilotRequestLog, $this>
+     */
+    public function copilotRequestLogs(): HasMany
+    {
+        return $this->hasMany(CopilotRequestLog::class);
+    }
+
+    /**
+     * @return HasMany<Incident, $this>
+     */
+    public function incidents(): HasMany
+    {
+        return $this->hasMany(Incident::class);
+    }
 }
