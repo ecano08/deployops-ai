@@ -187,6 +187,16 @@ export type CopilotResponse = {
   }
 }
 
+export type CopilotHistoryTurn = {
+  question: string
+  answer: string
+}
+
+export type CopilotTurn = CopilotHistoryTurn & {
+  id: string
+  toolsUsed: string[]
+}
+
 export type EvaluationCase = {
   id: number
   evaluation_dataset_id: number
@@ -361,11 +371,139 @@ export type AiProposedActionListResponse = {
 
 export type KnowledgeDocumentStatus = 'pending' | 'processing' | 'ready' | 'failed'
 
+export type KnowledgeDocumentLifecycleStatus = 'draft' | 'active' | 'superseded' | 'archived'
+
+export type KnowledgeDocumentType =
+  | 'architecture'
+  | 'business_rules'
+  | 'database'
+  | 'authorization'
+  | 'integrations'
+  | 'workflows'
+  | 'technical_decision'
+  | 'security'
+  | 'conventions'
+  | 'operations'
+  | 'known_bugs'
+  | 'other'
+
+export const KNOWLEDGE_DOCUMENT_TYPES: { value: KnowledgeDocumentType; label: string }[] = [
+  { value: 'architecture', label: 'Architecture' },
+  { value: 'business_rules', label: 'Business rules' },
+  { value: 'database', label: 'Database' },
+  { value: 'authorization', label: 'Authorization' },
+  { value: 'integrations', label: 'Integrations' },
+  { value: 'workflows', label: 'Workflows' },
+  { value: 'technical_decision', label: 'ADR / technical decision' },
+  { value: 'security', label: 'Security' },
+  { value: 'conventions', label: 'Conventions' },
+  { value: 'operations', label: 'Operations' },
+  { value: 'known_bugs', label: 'Known bugs' },
+  { value: 'other', label: 'Other' },
+]
+
+export type KnowledgeDocumentPreviewFormat = 'pdf' | 'text' | 'markdown'
+
+export type KnowledgeDocumentVersionSummary = {
+  id: number
+  title: string
+  revision_number: number
+  lifecycle_status: KnowledgeDocumentLifecycleStatus
+  status: KnowledgeDocumentStatus
+  version_label: string | null
+  effective_at: string | null
+  supersedes_document_id: number | null
+  created_at: string
+}
+
+export type KnowledgeDocumentRevisionSummary = {
+  id: number
+  title: string
+  document_type: KnowledgeDocumentType
+  version_label: string | null
+  revision_number: number
+  lifecycle_status: KnowledgeDocumentLifecycleStatus
+  effective_at: string | null
+  original_filename: string
+  mime_type: string
+  size_bytes: number
+  status: KnowledgeDocumentStatus
+  error_message: string | null
+  chunk_count: number
+  created_at: string
+  updated_at: string
+}
+
+export type KnowledgeDocumentLibraryEntry = {
+  chain_root_id: number
+  title: string
+  document_type: KnowledgeDocumentType
+  revision_count: number
+  needs_attention: boolean
+  attention_reason: string | null
+  view_document_id: number
+  updated_at: string
+  effective_at: string | null
+  active_revision: KnowledgeDocumentRevisionSummary | null
+  chain_head: KnowledgeDocumentRevisionSummary
+  attention_draft: KnowledgeDocumentRevisionSummary | null
+}
+
+export type KnowledgeDocumentLibraryStats = {
+  revision_total: number
+  ready_count: number
+  active_count: number
+  needs_attention_count: number
+}
+
+export type PaginationLinks = {
+  first: string | null
+  last: string | null
+  prev: string | null
+  next: string | null
+}
+
+export type PaginationMeta = {
+  current_page: number
+  from: number | null
+  last_page: number
+  path: string
+  per_page: number
+  to: number | null
+  total: number
+}
+
+export type KnowledgeDocumentLibraryQuery = {
+  view?: 'current' | 'needs_attention' | 'archived'
+  search?: string
+  document_type?: KnowledgeDocumentType
+  lifecycle_status?: KnowledgeDocumentLifecycleStatus
+  attention?: 'needs_attention' | 'processing_failed' | 'draft_pending'
+  status?: KnowledgeDocumentStatus
+  sort?: 'updated_at' | 'title' | 'effective_at'
+  direction?: 'asc' | 'desc'
+  page?: number
+  per_page?: number
+}
+
 export type KnowledgeDocument = {
   id: number
   workspace_id: number
   customer_id: number
   deployment_id: number
+  title: string
+  document_type: KnowledgeDocumentType
+  version_label: string | null
+  revision_number: number
+  lifecycle_status: KnowledgeDocumentLifecycleStatus
+  effective_at: string | null
+  supersedes_document_id: number | null
+  supersedes?: {
+    id: number
+    title: string
+    revision_number: number
+  } | null
+  metadata: Record<string, unknown> | null
   original_filename: string
   mime_type: string
   size_bytes: number
@@ -373,6 +511,8 @@ export type KnowledgeDocument = {
   error_message: string | null
   chunk_count: number
   uploaded_by: number
+  preview_format?: KnowledgeDocumentPreviewFormat | null
+  version_history?: KnowledgeDocumentVersionSummary[]
   created_at: string
   updated_at: string
 }
@@ -381,6 +521,27 @@ export type KnowledgeDocumentListResponse = {
   data: KnowledgeDocument[]
 }
 
+export type KnowledgeDocumentLibraryListResponse = {
+  data: KnowledgeDocumentLibraryEntry[]
+  links: PaginationLinks
+  meta: PaginationMeta
+  stats: KnowledgeDocumentLibraryStats
+}
+
 export type KnowledgeDocumentResponse = {
   data: KnowledgeDocument
+}
+
+export type KnowledgeDocumentMatchCandidate = {
+  id: number
+  title: string
+  revision_number: number
+  lifecycle_status: KnowledgeDocumentLifecycleStatus
+  original_filename: string
+  chain_head_id: number
+  chain_head_revision_number: number
+}
+
+export type KnowledgeDocumentMatchCandidateListResponse = {
+  data: KnowledgeDocumentMatchCandidate[]
 }

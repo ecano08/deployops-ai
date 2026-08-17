@@ -5,6 +5,7 @@ use App\Models\Customer;
 use App\Models\Deployment;
 use App\Models\DeploymentIntegration;
 use App\Models\IntegrationActivity;
+use App\Models\KnowledgeDocument;
 use App\Models\Workspace;
 use App\Services\CopilotToolExecutor;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
@@ -613,4 +614,228 @@ it('redacts sensitive content from copilot request logs', function () {
     expect($log)->not->toBeNull()
         ->and($log->question)->not->toContain($secret)
         ->and($log->question)->toContain('[REDACTED]');
+});
+
+it('includes conversation history in the openai input for follow-up questions', function () {
+    $fixture = createWorkspaceWithRoles();
+    $customer = Customer::factory()->forWorkspace($fixture['workspace'])->create();
+    $deployment = Deployment::factory()->forCustomer($customer)->create();
+
+    Http::fake([
+        'api.openai.com/v1/responses' => Http::sequence()
+            ->push(openAiToolCallResponse('search_knowledge', json_encode([
+                'query' => 'priority same product reservation',
+                'top_k' => 5,
+            ])))
+            ->push(openAiMessageResponse('The first customer to complete payment receives priority.')),
+    ]);
+
+    Sanctum::actingAs($fixture['owner']);
+
+    $history = [[
+        'question' => 'What happens if a customer does not pay within the 15-minute reservation?',
+        'answer' => 'The reservation expires after 15 minutes according to reservation-policy.pdf.',
+    ]];
+
+    $this->postJson(copilotPath($fixture['workspace'], $customer, $deployment), [
+        'message' => 'And who has priority if two people want the same product?',
+        'history' => $history,
+        'history_deployment_id' => $deployment->id,
+    ])
+        ->assertOk()
+        ->assertJsonPath('data.tools_used', ['search_knowledge']);
+
+    $firstRequestBody = json_decode(Http::recorded()[0][0]->body(), true);
+    $input = $firstRequestBody['input'];
+
+    expect($input)->toBeArray()
+        ->and($firstRequestBody['store'] ?? null)->toBeFalse()
+        ->and(array_key_exists('previous_response_id', $firstRequestBody))->toBeFalse();
+
+    $userMessages = collect($input)->where('role', 'user')->values();
+    $assistantMessages = collect($input)->where('role', 'assistant')->values();
+
+    expect($userMessages)->toHaveCount(2)
+        ->and($assistantMessages)->toHaveCount(1)
+        ->and($userMessages[0]['content'][0]['text'])->toBe($history[0]['question'])
+        ->and($assistantMessages[0]['content'][0]['text'])->toBe($history[0]['answer'])
+        ->and($userMessages[1]['content'][0]['text'])->toBe('And who has priority if two people want the same product?');
+});
+
+it('limits conversation history to the most recent six turns', function () {
+    $fixture = createWorkspaceWithRoles();
+    $customer = Customer::factory()->forWorkspace($fixture['workspace'])->create();
+    $deployment = Deployment::factory()->forCustomer($customer)->create();
+
+    Http::fake([
+        'api.openai.com/v1/responses' => Http::sequence()
+            ->push(openAiMessageResponse('Follow-up acknowledged.')),
+    ]);
+
+    Sanctum::actingAs($fixture['owner']);
+
+    $history = [];
+
+    for ($turn = 1; $turn <= 8; $turn++) {
+        $history[] = [
+            'question' => "Question {$turn}",
+            'answer' => "Answer {$turn}",
+        ];
+    }
+
+    $this->postJson(copilotPath($fixture['workspace'], $customer, $deployment), [
+        'message' => 'Follow up',
+        'history' => $history,
+        'history_deployment_id' => $deployment->id,
+    ])->assertOk();
+
+    $firstRequestBody = json_decode(Http::recorded()[0][0]->body(), true);
+    $input = $firstRequestBody['input'];
+
+    expect(collect($input)->where('role', 'user'))->toHaveCount(7)
+        ->and(collect($input)->where('role', 'assistant'))->toHaveCount(6)
+        ->and(collect($input)->where('role', 'user')->first()['content'][0]['text'])->toBe('Question 3')
+        ->and(collect($input)->where('role', 'assistant')->last()['content'][0]['text'])->toBe('Answer 8');
+});
+
+it('requires history to be scoped to the current deployment', function () {
+    $fixture = createWorkspaceWithRoles();
+    $customer = Customer::factory()->forWorkspace($fixture['workspace'])->create();
+    $deployment = Deployment::factory()->forCustomer($customer)->create();
+    $otherDeployment = Deployment::factory()->forCustomer($customer)->create();
+
+    Sanctum::actingAs($fixture['owner']);
+
+    $this->postJson(copilotPath($fixture['workspace'], $customer, $deployment), [
+        'message' => 'Follow up',
+        'history' => [[
+            'question' => 'What integrations are configured?',
+            'answer' => 'One integration is configured.',
+        ]],
+        'history_deployment_id' => $otherDeployment->id,
+    ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['history_deployment_id']);
+
+    Http::assertNothingSent();
+});
+
+it('requires history deployment id when history is provided', function () {
+    $fixture = createWorkspaceWithRoles();
+    $customer = Customer::factory()->forWorkspace($fixture['workspace'])->create();
+    $deployment = Deployment::factory()->forCustomer($customer)->create();
+
+    Sanctum::actingAs($fixture['owner']);
+
+    $this->postJson(copilotPath($fixture['workspace'], $customer, $deployment), [
+        'message' => 'Follow up',
+        'history' => [[
+            'question' => 'What integrations are configured?',
+            'answer' => 'One integration is configured.',
+        ]],
+    ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['history_deployment_id']);
+
+    Http::assertNothingSent();
+});
+
+it('keeps multi-turn follow-up requests stateless with store false and no previous response id', function () {
+    $fixture = createWorkspaceWithRoles();
+    $customer = Customer::factory()->forWorkspace($fixture['workspace'])->create();
+    $deployment = Deployment::factory()->forCustomer($customer)->create();
+
+    Http::fake([
+        'api.openai.com/v1/responses' => Http::sequence()
+            ->push(openAiToolCallResponse('search_knowledge', json_encode([
+                'query' => 'priority same product reservation',
+                'top_k' => 5,
+            ]), 'resp_tool', 'call_follow_up'))
+            ->push(openAiMessageResponse('Priority goes to the first completed payment.')),
+    ]);
+
+    Sanctum::actingAs($fixture['owner']);
+
+    $this->postJson(copilotPath($fixture['workspace'], $customer, $deployment), [
+        'message' => 'And who has priority if two people want the same product?',
+        'history' => [[
+            'question' => 'What happens if a customer does not pay within the 15-minute reservation?',
+            'answer' => 'The reservation expires after 15 minutes.',
+        ]],
+        'history_deployment_id' => $deployment->id,
+    ])->assertOk();
+
+    expect(Http::recorded())->toHaveCount(2);
+
+    foreach (Http::recorded() as [$request]) {
+        $body = json_decode($request->body(), true);
+
+        expect($body)->toBeArray()
+            ->and($body['store'] ?? null)->toBeFalse()
+            ->and(array_key_exists('previous_response_id', $body))->toBeFalse();
+    }
+
+    $secondRequestBody = json_decode(Http::recorded()[1][0]->body(), true);
+    $input = $secondRequestBody['input'];
+
+    expect(collect($input)->firstWhere('type', 'function_call'))->not->toBeNull()
+        ->and(collect($input)->firstWhere('type', 'function_call_output'))->not->toBeNull();
+});
+
+it('searches knowledge for short contextual follow-ups about documented priority rules', function () {
+    $fixture = createWorkspaceWithRoles();
+    $customer = Customer::factory()->forWorkspace($fixture['workspace'])->create();
+    $deployment = Deployment::factory()->forCustomer($customer)->create();
+    KnowledgeDocument::factory()->forDeployment($deployment, $fixture['engineer'])->ready()->active()->create([
+        'original_filename' => 'reservation-policy.pdf',
+    ]);
+
+    config([
+        'services.ai_service.url' => 'http://ai-service.test',
+        'services.ai_service.token' => 'test-ai-service-token',
+    ]);
+
+    Http::fake([
+        'api.openai.com/v1/responses' => Http::sequence()
+            ->push(openAiMessageResponse('I do not have that information in the knowledge base.'))
+            ->push(openAiMessageResponse('According to reservation-policy.pdf, priority goes to the first confirmed payment.')),
+        'http://ai-service.test/search' => Http::response([
+            'results' => [
+                [
+                    'document_id' => 1,
+                    'source_filename' => 'reservation-policy.pdf',
+                    'chunk_index' => 1,
+                    'content' => 'When multiple customers want the same product, the first confirmed payment receives priority.',
+                    'score' => 0.94,
+                ],
+            ],
+        ]),
+    ]);
+
+    Sanctum::actingAs($fixture['owner']);
+
+    $history = [[
+        'question' => 'What happens if the customer does not pay within 15 minutes?',
+        'answer' => 'The cart reservation is released after 15 minutes according to reservation-policy.pdf.',
+    ]];
+
+    $this->postJson(copilotPath($fixture['workspace'], $customer, $deployment), [
+        'message' => 'And who has priority?',
+        'history' => $history,
+        'history_deployment_id' => $deployment->id,
+    ])
+        ->assertOk()
+        ->assertJsonPath('data.tools_used', ['search_knowledge'])
+        ->assertJsonPath('data.answer', 'According to reservation-policy.pdf, priority goes to the first confirmed payment.');
+
+    Http::assertSent(function (Request $request) {
+        if ($request->url() !== 'http://ai-service.test/search') {
+            return false;
+        }
+
+        $body = $request->data();
+
+        return str_contains($body['query'], 'And who has priority?')
+            && str_contains($body['query'], '15 minutes');
+    });
 });

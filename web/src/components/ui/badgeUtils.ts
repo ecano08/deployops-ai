@@ -36,6 +36,24 @@ export function statusBadgeVariant(status: string): BadgeVariant {
   return 'neutral'
 }
 
+export function lifecycleBadgeVariant(status: string): BadgeVariant {
+  const normalized = status.toLowerCase()
+
+  if (normalized === 'active') {
+    return 'success'
+  }
+
+  if (normalized === 'draft') {
+    return 'warning'
+  }
+
+  if (['superseded', 'archived'].includes(normalized)) {
+    return 'neutral'
+  }
+
+  return 'neutral'
+}
+
 export function roleBadgeVariant(role: string): BadgeVariant {
   switch (role.toLowerCase()) {
     case 'owner':

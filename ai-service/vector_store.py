@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from contextlib import contextmanager
 from typing import Any, Iterator
 
@@ -131,11 +132,42 @@ class VectorStore:
         deployment_id: int,
         query_embedding: list[float],
         top_k: int,
+        document_ids: list[int] | None = None,
+        lexical_terms: list[str] | None = None,
     ) -> list[dict[str, Any]]:
+        if document_ids is not None and document_ids == []:
+            return []
+
+        normalized_terms = self._normalize_lexical_terms(lexical_terms)
+        candidate_k = top_k
+
+        if normalized_terms != []:
+            candidate_k = min(
+                max(top_k, top_k * settings.hybrid_candidate_multiplier),
+                settings.max_top_k * 2,
+            )
+
         with self._connection_context() as connection:
             with connection.cursor(row_factory=dict_row) as cursor:
+                document_filter = ""
+                params: list[Any] = [
+                    self._format_vector(query_embedding),
+                    workspace_id,
+                    customer_id,
+                    deployment_id,
+                ]
+
+                if document_ids is not None:
+                    document_filter = "AND document_id = ANY(%s)"
+                    params.append(document_ids)
+
+                params.extend([
+                    self._format_vector(query_embedding),
+                    candidate_k,
+                ])
+
                 cursor.execute(
-                    """
+                    f"""
                     SELECT
                         document_id,
                         source_filename,
@@ -146,22 +178,16 @@ class VectorStore:
                     WHERE workspace_id = %s
                       AND customer_id = %s
                       AND deployment_id = %s
+                      {document_filter}
                     ORDER BY embedding <=> %s::vector
                     LIMIT %s
                     """,
-                    (
-                        self._format_vector(query_embedding),
-                        workspace_id,
-                        customer_id,
-                        deployment_id,
-                        self._format_vector(query_embedding),
-                        top_k,
-                    ),
+                    params,
                 )
 
                 rows = cursor.fetchall()
 
-        return [
+        results = [
             {
                 "document_id": int(row["document_id"]),
                 "source_filename": str(row["source_filename"]),
@@ -171,6 +197,11 @@ class VectorStore:
             }
             for row in rows
         ]
+
+        if normalized_terms == []:
+            return results
+
+        return self._rerank_with_lexical(results, normalized_terms, top_k)
 
     @contextmanager
     def _connection_context(self) -> Iterator[psycopg.Connection]:
@@ -184,3 +215,64 @@ class VectorStore:
     @staticmethod
     def _format_vector(values: list[float]) -> str:
         return json.dumps(values)
+
+    @staticmethod
+    def _normalize_lexical_terms(lexical_terms: list[str] | None) -> list[str]:
+        if lexical_terms is None:
+            return []
+
+        normalized: list[str] = []
+
+        for term in lexical_terms:
+            cleaned = term.strip()
+
+            if cleaned == "":
+                continue
+
+            normalized.append(cleaned)
+
+        return list(dict.fromkeys(normalized))
+
+    def _rerank_with_lexical(
+        self,
+        results: list[dict[str, Any]],
+        lexical_terms: list[str],
+        top_k: int,
+    ) -> list[dict[str, Any]]:
+        reranked: list[dict[str, Any]] = []
+
+        for result in results:
+            lexical_score = self._lexical_score(str(result["content"]), lexical_terms)
+            semantic_score = float(result["score"])
+            combined_score = (
+                settings.hybrid_semantic_weight * semantic_score
+                + settings.hybrid_lexical_weight * lexical_score
+            )
+
+            reranked.append({
+                **result,
+                "score": combined_score,
+            })
+
+        reranked.sort(key=lambda item: item["score"], reverse=True)
+
+        return reranked[:top_k]
+
+    def _lexical_score(self, content: str, lexical_terms: list[str]) -> float:
+        if lexical_terms == []:
+            return 0.0
+
+        content_lower = content.lower()
+        matched = 0.0
+
+        for term in lexical_terms:
+            term_lower = term.lower()
+
+            if term_lower in content_lower:
+                matched += 1.0
+                continue
+
+            if re.search(r"\d", term) and re.search(rf"\b{re.escape(term)}\b", content_lower):
+                matched += 1.0
+
+        return matched / len(lexical_terms)

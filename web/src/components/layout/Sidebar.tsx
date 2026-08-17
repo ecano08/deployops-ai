@@ -32,7 +32,7 @@ const navItems: NavItem[] = [
   { id: 'team', label: 'Team', icon: Users },
   { id: 'integrations', label: 'Integrations', icon: Plug },
   { id: 'copilot', label: 'Copilot', icon: Bot },
-  { id: 'knowledge', label: 'Knowledge', icon: BookOpen },
+  { id: 'knowledge', label: 'Documentation', icon: BookOpen },
   { id: 'evals', label: 'Evaluations', icon: Activity },
   { id: 'approvals', label: 'Approvals', icon: CheckSquare },
   { id: 'observability', label: 'Observability', icon: Radar },

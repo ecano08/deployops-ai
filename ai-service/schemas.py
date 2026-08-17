@@ -28,6 +28,8 @@ class SearchRequest(BaseModel):
     deployment_id: int
     query: str = Field(min_length=1)
     top_k: int | None = None
+    document_ids: list[int] | None = None
+    lexical_terms: list[str] | None = None
 
 
 class SearchResult(BaseModel):

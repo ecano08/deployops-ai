@@ -146,14 +146,14 @@ class CopilotToolExecutor
         return [
             'type' => 'function',
             'name' => 'search_knowledge',
-            'description' => 'Search deployment-scoped knowledge documents for relevant passages. Use before answering questions about uploaded runbooks, guides, or documentation.',
+            'description' => 'Search deployment-scoped knowledge documents for relevant passages. Required before answering any question about project documentation, policies, runbooks, or guides—including short contextual follow-ups that depend on prior user questions. Never skip because a prior assistant reply seemed sufficient.',
             'strict' => true,
             'parameters' => [
                 'type' => 'object',
                 'properties' => [
                     'query' => [
                         'type' => 'string',
-                        'description' => 'Natural language search query.',
+                        'description' => 'Natural language search query. For follow-ups, combine the current question with the prior user topic.',
                     ],
                     'top_k' => [
                         'type' => 'integer',

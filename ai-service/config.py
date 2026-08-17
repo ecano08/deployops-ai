@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     chunk_overlap: int = 200
     default_top_k: int = 5
     max_top_k: int = 20
+    hybrid_candidate_multiplier: int = 4
+    hybrid_semantic_weight: float = 0.65
+    hybrid_lexical_weight: float = 0.35
 
 
 settings = Settings()

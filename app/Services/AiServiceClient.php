@@ -50,15 +50,24 @@ class AiServiceClient
         int $deploymentId,
         string $query,
         int $topK,
+        array $documentIds = [],
+        array $lexicalTerms = [],
     ): array {
+        $payload = [
+            'workspace_id' => $workspaceId,
+            'customer_id' => $customerId,
+            'deployment_id' => $deploymentId,
+            'query' => $query,
+            'top_k' => $topK,
+            'document_ids' => $documentIds,
+        ];
+
+        if ($lexicalTerms !== []) {
+            $payload['lexical_terms'] = $lexicalTerms;
+        }
+
         $response = $this->client()
-            ->post('/search', [
-                'workspace_id' => $workspaceId,
-                'customer_id' => $customerId,
-                'deployment_id' => $deploymentId,
-                'query' => $query,
-                'top_k' => $topK,
-            ])
+            ->post('/search', $payload)
             ->throw();
 
         /** @var array{results?: array<int, array<string, mixed>>} $payload */

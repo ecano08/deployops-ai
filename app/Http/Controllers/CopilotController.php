@@ -29,6 +29,7 @@ class CopilotController extends Controller
                     deployment: $deployment,
                 ),
                 $request->validated('message'),
+                $request->validated('history', []),
             );
         } catch (CopilotException $exception) {
             return response()->json([

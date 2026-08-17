@@ -109,8 +109,12 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/incidents/{incident}', [IncidentController::class, 'show'])->scopeBindings();
     Route::patch('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/incidents/{incident}', [IncidentController::class, 'update'])->scopeBindings();
     Route::get('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/knowledge-documents', [KnowledgeDocumentController::class, 'index'])->scopeBindings();
+    Route::post('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/knowledge-documents/match-candidates', [KnowledgeDocumentController::class, 'matchCandidates'])->scopeBindings();
     Route::post('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/knowledge-documents', [KnowledgeDocumentController::class, 'store'])->scopeBindings();
     Route::get('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/knowledge-documents/{knowledge_document}', [KnowledgeDocumentController::class, 'show'])->scopeBindings();
+    Route::get('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/knowledge-documents/{knowledge_document}/content', [KnowledgeDocumentController::class, 'content'])->scopeBindings();
+    Route::post('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/knowledge-documents/{knowledge_document}/activate', [KnowledgeDocumentController::class, 'activate'])->scopeBindings();
+    Route::post('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/knowledge-documents/{knowledge_document}/archive', [KnowledgeDocumentController::class, 'archive'])->scopeBindings();
     Route::delete('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/knowledge-documents/{knowledge_document}', [KnowledgeDocumentController::class, 'destroy'])->scopeBindings();
     Route::get('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/evaluation-datasets', [EvaluationDatasetController::class, 'index'])->scopeBindings();
     Route::post('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/evaluation-datasets', [EvaluationDatasetController::class, 'store'])->scopeBindings();

@@ -11,20 +11,24 @@ class CopilotService
 {
     private const int MAX_TOOL_ROUNDS = 5;
 
+    private const int MAX_HISTORY_TURNS = 6;
+
     public function __construct(
         private OpenAIResponsesClient $openAI,
         private CopilotToolExecutor $toolExecutor,
         private CopilotQuestionRedactor $questionRedactor,
         private OpenAICostEstimator $costEstimator,
         private IncidentService $incidentService,
+        private CopilotKnowledgeGroundingAdvisor $groundingAdvisor,
     ) {}
 
     /**
+     * @param  array<int, array{question: string, answer: string}>  $history
      * @return array{answer: string, tools_used: array<int, string>}
      */
-    public function ask(CopilotContext $context, string $question): array
+    public function ask(CopilotContext $context, string $question, array $history = []): array
     {
-        $telemetry = $this->askWithTelemetry($context, $question, persistLog: true);
+        $telemetry = $this->askWithTelemetry($context, $question, $history, persistLog: true);
 
         if ($telemetry['error'] !== null) {
             throw new CopilotException(
@@ -41,6 +45,7 @@ class CopilotService
     }
 
     /**
+     * @param  array<int, array{question: string, answer: string}>  $history
      * @return array{
      *   answer: string|null,
      *   tools_used: array<int, string>,
@@ -51,18 +56,24 @@ class CopilotService
      *   reference: int|null
      * }
      */
-    public function askWithTelemetry(CopilotContext $context, string $question, bool $persistLog = true): array
-    {
+    public function askWithTelemetry(
+        CopilotContext $context,
+        string $question,
+        array $history = [],
+        bool $persistLog = true,
+    ): array {
         $startedAt = hrtime(true);
         $toolsUsed = [];
         $sourcesUsed = [];
         $model = (string) config('services.openai.model');
         $traceRecorder = new AiTraceRecorder;
+        $history = $this->normalizeHistory($history);
+        $executionContext = $this->executionContext($context, $question, $history);
 
         try {
-            $instructions = $this->instructions($context);
+            $instructions = $this->instructions($context, $history, $question);
             $tools = $this->toolExecutor->definitions();
-            $input = $question;
+            $input = $this->buildInput($history, $question);
             $conversationItems = null;
 
             for ($round = 0; $round < self::MAX_TOOL_ROUNDS; $round++) {
@@ -76,6 +87,22 @@ class CopilotService
 
                     if ($answer === null || $answer === '') {
                         throw new CopilotException('The AI service returned an empty response.', 502);
+                    }
+
+                    if ($this->groundingAdvisor->shouldForceKnowledgeSearch($history, $question, $toolsUsed)) {
+                        $this->injectProactiveKnowledgeSearch(
+                            $executionContext,
+                            $history,
+                            $question,
+                            $toolsUsed,
+                            $sourcesUsed,
+                            $traceRecorder,
+                            $conversationItems,
+                        );
+
+                        $input = $conversationItems;
+
+                        continue;
                     }
 
                     $latencyMs = $this->latencyMs($startedAt);
@@ -112,7 +139,7 @@ class CopilotService
                     }
 
                     try {
-                        $result = $this->toolExecutor->validateAndExecute($context, $call['name'], $arguments);
+                        $result = $this->toolExecutor->validateAndExecute($executionContext, $call['name'], $arguments);
                         $toolStatus = isset($result['error']) ? 'failure' : 'success';
                     } catch (AuthorizationException $exception) {
                         $result = [
@@ -142,7 +169,7 @@ class CopilotService
 
                 if ($conversationItems === null) {
                     $conversationItems = [
-                        $this->openAI->userMessageItem($question),
+                        ...$this->conversationSeedItems($history, $question),
                         ...$functionCallItems,
                         ...$toolOutputs,
                     ];
@@ -215,15 +242,102 @@ class CopilotService
         }
     }
 
-    private function instructions(CopilotContext $context): string
+    /**
+     * @param  array<int, array{question: string, answer: string}>  $history
+     * @return array<int, array<string, mixed>>
+     */
+    private function conversationSeedItems(array $history, string $question): array
     {
-        return sprintf(
+        $input = $this->buildInput($history, $question);
+
+        return is_array($input) ? $input : [$this->openAI->userMessageItem($input)];
+    }
+
+    /**
+     * @param  array<int, array{question: string, answer: string}>  $history
+     * @return string|array<int, array<string, mixed>>
+     */
+    private function buildInput(array $history, string $question): string|array
+    {
+        if ($history === []) {
+            return $question;
+        }
+
+        $items = [];
+
+        foreach ($history as $turn) {
+            $items[] = $this->openAI->userMessageItem($turn['question']);
+            $items[] = $this->openAI->assistantMessageItem($turn['answer']);
+        }
+
+        $items[] = $this->openAI->userMessageItem($question);
+
+        return $items;
+    }
+
+    /**
+     * @param  array<int, array{question: string, answer: string}>  $history
+     * @return array<int, array{question: string, answer: string}>
+     */
+    private function normalizeHistory(array $history): array
+    {
+        $normalized = [];
+
+        foreach ($history as $turn) {
+            if (! is_array($turn)) {
+                continue;
+            }
+
+            $question = $turn['question'] ?? null;
+            $answer = $turn['answer'] ?? null;
+
+            if (! is_string($question) || $question === '' || ! is_string($answer) || $answer === '') {
+                continue;
+            }
+
+            $normalized[] = [
+                'question' => $question,
+                'answer' => $answer,
+            ];
+        }
+
+        if (count($normalized) <= self::MAX_HISTORY_TURNS) {
+            return $normalized;
+        }
+
+        return array_slice($normalized, -self::MAX_HISTORY_TURNS);
+    }
+
+    /**
+     * @param  array<int, array{question: string, answer: string}>  $history
+     */
+    private function executionContext(CopilotContext $context, string $question, array $history): CopilotContext
+    {
+        return new CopilotContext(
+            user: $context->user,
+            workspace: $context->workspace,
+            customer: $context->customer,
+            deployment: $context->deployment,
+            currentQuestion: $question,
+            userQuestionHistory: array_values(array_map(
+                static fn (array $turn): string => $turn['question'],
+                $history,
+            )),
+        );
+    }
+
+    private function instructions(CopilotContext $context, array $history, string $question): string
+    {
+        $instructions = sprintf(
             'You are DeployOps AI Copilot, a read-only assistant for deployment operations. '.
             'You are scoped to workspace "%s", customer "%s", and deployment "%s". '.
-            'Use the provided tools to fetch factual data before answering. '.
-            'For questions about uploaded documentation, runbooks, or guides, call search_knowledge first. '.
+            'Prior assistant replies in the conversation are conversational context only and are not authoritative project knowledge. '.
+            'Always use tools to fetch factual deployment, operational, and documentation data before answering. '.
+            'For any project-specific factual question about uploaded documentation, policies, runbooks, or guides, call search_knowledge before answering. '.
+            'Short contextual follow-ups that inherit a prior user topic still require search_knowledge; never rely on prior assistant replies as evidence. '.
             'Only cite knowledge that appears in search_knowledge results and include source filenames. '.
-            'If search_knowledge returns no relevant results, say you do not have that information in the knowledge base. '.
+            'Do not ask the user for permission to search documentation. '.
+            'If search_knowledge returns no relevant results, say the information is undocumented or not in the knowledge base. '.
             'For operational health, incidents, or AI reliability questions, use get_ai_health_summary, list_recent_incidents, or get_incident. '.
             'Never invent deployment, customer, integration, or documentation details. '.
             'Only reference integration IDs returned by list_deployment_integrations. '.
@@ -234,6 +348,87 @@ class CopilotService
             $context->customer->name,
             $context->deployment->name,
         );
+
+        $directive = $this->groundingAdvisor->groundingDirective($history, $question);
+
+        if ($directive !== null) {
+            $instructions .= ' '.$directive;
+        }
+
+        return $instructions;
+    }
+
+    /**
+     * @param  array<int, array{question: string, answer: string}>  $history
+     * @param  array<int, string>  $toolsUsed
+     * @param  array<int, string>  $sourcesUsed
+     * @param  array<int, array<string, mixed>>|null  $conversationItems
+     */
+    private function injectProactiveKnowledgeSearch(
+        CopilotContext $executionContext,
+        array $history,
+        string $question,
+        array &$toolsUsed,
+        array &$sourcesUsed,
+        AiTraceRecorder $traceRecorder,
+        ?array &$conversationItems,
+    ): void {
+        $searchQuery = $this->groundingAdvisor->buildSearchQuery($question, $history);
+        $topK = (int) config('services.knowledge.default_top_k', 5);
+        $arguments = [
+            'query' => $searchQuery,
+            'top_k' => $topK,
+        ];
+        $callId = 'call_proactive_search_knowledge';
+        $toolStartedAt = hrtime(true);
+
+        try {
+            $result = $this->toolExecutor->validateAndExecute($executionContext, 'search_knowledge', $arguments);
+            $toolStatus = isset($result['error']) ? 'failure' : 'success';
+        } catch (AuthorizationException $exception) {
+            $result = [
+                'error' => $exception->getMessage() ?: 'Not authorized to access this resource.',
+            ];
+            $toolStatus = 'failure';
+        }
+
+        $toolsUsed[] = 'search_knowledge';
+        $toolDurationMs = (int) round((hrtime(true) - $toolStartedAt) / 1_000_000);
+        $toolMetadata = $this->toolMetadata('search_knowledge', $result);
+        $traceRecorder->recordToolCall('search_knowledge', $toolDurationMs, $toolStatus, $toolMetadata);
+
+        if (isset($result['results']) && is_array($result['results'])) {
+            $traceRecorder->recordRagUsage(count($result['results']));
+        }
+
+        $sourcesUsed = array_merge($sourcesUsed, $this->extractSourcesFromToolResult('search_knowledge', $result));
+
+        $functionCallItem = $this->openAI->functionCallItem(
+            $callId,
+            'search_knowledge',
+            json_encode($arguments, JSON_THROW_ON_ERROR),
+        );
+        $toolOutput = [
+            'type' => 'function_call_output',
+            'call_id' => $callId,
+            'output' => json_encode($result, JSON_THROW_ON_ERROR),
+        ];
+
+        if ($conversationItems === null) {
+            $conversationItems = [
+                ...$this->conversationSeedItems($history, $question),
+                $functionCallItem,
+                $toolOutput,
+            ];
+
+            return;
+        }
+
+        $conversationItems = [
+            ...$conversationItems,
+            $functionCallItem,
+            $toolOutput,
+        ];
     }
 
     /**

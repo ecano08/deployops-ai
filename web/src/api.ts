@@ -20,7 +20,9 @@ import type {
   IntegrationListResponse,
   IntegrationResponse,
   IntegrationTestResponse,
-  KnowledgeDocumentListResponse,
+  KnowledgeDocumentLibraryListResponse,
+  KnowledgeDocumentLibraryQuery,
+  KnowledgeDocumentMatchCandidateListResponse,
   KnowledgeDocumentResponse,
   UpdateIntegrationPayload,
   UserResponse,
@@ -366,12 +368,24 @@ export function askCopilot(
   customerId: number,
   deploymentId: number,
   message: string,
+  history: Array<{ question: string; answer: string }> = [],
 ) {
+  const payload: {
+    message: string
+    history?: Array<{ question: string; answer: string }>
+    history_deployment_id?: number
+  } = { message }
+
+  if (history.length > 0) {
+    payload.history = history
+    payload.history_deployment_id = deploymentId
+  }
+
   return request<CopilotResponse>(
     `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/copilot`,
     {
       method: 'POST',
-      body: JSON.stringify({ message }),
+      body: JSON.stringify(payload),
     },
   )
 }
@@ -571,24 +585,130 @@ export function fetchIncidents(
   )
 }
 
+export function fetchKnowledgeDocumentMatchCandidates(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+  payload: { filename: string; title?: string | null },
+) {
+  return request<KnowledgeDocumentMatchCandidateListResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/knowledge-documents/match-candidates`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        filename: payload.filename,
+        title: payload.title ?? null,
+      }),
+    },
+  )
+}
+
 export function fetchKnowledgeDocuments(
   workspaceId: number,
   customerId: number,
   deploymentId: number,
+  query: KnowledgeDocumentLibraryQuery = {},
 ) {
-  return request<KnowledgeDocumentListResponse>(
-    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/knowledge-documents`,
+  const params = new URLSearchParams()
+
+  Object.entries(query).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      params.set(key, String(value))
+    }
+  })
+
+  const queryString = params.toString()
+  const suffix = queryString ? `?${queryString}` : ''
+
+  return request<KnowledgeDocumentLibraryListResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/knowledge-documents${suffix}`,
   )
+}
+
+export function fetchKnowledgeDocument(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+  documentId: number,
+) {
+  return request<KnowledgeDocumentResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/knowledge-documents/${documentId}`,
+  )
+}
+
+export function knowledgeDocumentContentPath(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+  documentId: number,
+): string {
+  return `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/knowledge-documents/${documentId}/content`
+}
+
+export type KnowledgeDocumentPreviewError = {
+  message: string
+  preview_state: string
+  error_message?: string | null
+}
+
+export async function fetchKnowledgeDocumentContent(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+  documentId: number,
+): Promise<Blob> {
+  const headers = new Headers({ Accept: '*/*' })
+  const token = getToken()
+
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`)
+  }
+
+  const response = await fetch(
+    `${import.meta.env.VITE_API_URL}${knowledgeDocumentContentPath(workspaceId, customerId, deploymentId, documentId)}`,
+    { headers },
+  )
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => ({}))) as KnowledgeDocumentPreviewError
+    const error = new Error(payload.message ?? `HTTP ${response.status}`)
+    ;(error as Error & { previewState?: string }).previewState = payload.preview_state
+  ;(error as Error & { errorMessage?: string | null }).errorMessage = payload.error_message ?? null
+    throw error
+  }
+
+  return response.blob()
 }
 
 export function uploadKnowledgeDocument(
   workspaceId: number,
   customerId: number,
   deploymentId: number,
-  file: File,
+  payload: {
+    file: File
+    title: string
+    document_type: string
+    version_label?: string | null
+    effective_at?: string | null
+    supersedes_document_id?: number | null
+  },
 ) {
   const formData = new FormData()
-  formData.append('file', file)
+  formData.append('file', payload.file)
+  formData.append('title', payload.title)
+  formData.append('document_type', payload.document_type)
+
+  if (payload.version_label) {
+    formData.append('version_label', payload.version_label)
+  }
+
+  if (payload.effective_at) {
+    formData.append('effective_at', payload.effective_at)
+  }
+
+  if (payload.supersedes_document_id) {
+    formData.append('supersedes_document_id', String(payload.supersedes_document_id))
+  }
 
   const headers = new Headers({ Accept: 'application/json' })
   const token = getToken()
@@ -631,5 +751,29 @@ export function deleteKnowledgeDocument(
   return request<void>(
     `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/knowledge-documents/${documentId}`,
     { method: 'DELETE' },
+  )
+}
+
+export function activateKnowledgeDocument(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+  documentId: number,
+) {
+  return request<KnowledgeDocumentResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/knowledge-documents/${documentId}/activate`,
+    { method: 'POST' },
+  )
+}
+
+export function archiveKnowledgeDocument(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+  documentId: number,
+) {
+  return request<KnowledgeDocumentResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/knowledge-documents/${documentId}/archive`,
+    { method: 'POST' },
   )
 }
