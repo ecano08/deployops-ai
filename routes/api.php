@@ -15,6 +15,7 @@ use App\Http\Controllers\IntegrationActivityController;
 use App\Http\Controllers\IntegrationWebhookController;
 use App\Http\Controllers\KnowledgeDocumentController;
 use App\Http\Controllers\WorkspaceController;
+use App\Http\Controllers\WorkspaceInvitationController;
 use App\Http\Controllers\WorkspaceMemberController;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
@@ -58,7 +59,11 @@ Route::get('/health/ai', function () {
 Route::middleware('throttle:auth')->group(function () {
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/login', [AuthController::class, 'login']);
+    Route::post('/invitations/{workspaceInvitation:token}/accept', [WorkspaceInvitationController::class, 'accept']);
 });
+
+Route::get('/invitations/{workspaceInvitation:token}', [WorkspaceInvitationController::class, 'show'])
+    ->middleware('throttle:api');
 
 Route::post('/webhooks/integrations/{deployment_integration}', [IntegrationWebhookController::class, 'store'])
     ->middleware('throttle:integration-webhooks');
@@ -71,6 +76,8 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::get('/workspaces/{workspace}', [WorkspaceController::class, 'show']);
     Route::get('/workspaces/{workspace}/members', [WorkspaceMemberController::class, 'index']);
     Route::post('/workspaces/{workspace}/members', [WorkspaceMemberController::class, 'store']);
+    Route::get('/workspaces/{workspace}/invitations', [WorkspaceInvitationController::class, 'index']);
+    Route::post('/workspaces/{workspace}/invitations', [WorkspaceInvitationController::class, 'store']);
     Route::patch('/workspaces/{workspace}/members/{member}', [WorkspaceMemberController::class, 'update'])->scopeBindings();
     Route::delete('/workspaces/{workspace}/members/{member}', [WorkspaceMemberController::class, 'destroy'])->scopeBindings();
     Route::get('/workspaces/{workspace}/customers', [CustomerController::class, 'index']);

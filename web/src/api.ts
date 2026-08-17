@@ -25,8 +25,12 @@ import type {
   UpdateIntegrationPayload,
   UserResponse,
   WorkspaceListResponse,
+  WorkspaceInvitationListResponse,
+  WorkspaceInvitationResponse,
   WorkspaceMemberListResponse,
+  WorkspaceMemberResponse,
   WorkspaceResponse,
+  WorkspaceRole,
 } from './types'
 
 const TOKEN_KEY = 'deployops_token'
@@ -136,6 +140,68 @@ export function createWorkspace(name: string) {
 
 export function fetchWorkspaceMembers(workspaceId: number) {
   return request<WorkspaceMemberListResponse>(`/api/workspaces/${workspaceId}/members`)
+}
+
+export function createWorkspaceMember(
+  workspaceId: number,
+  payload: { email: string; role: Exclude<WorkspaceRole, 'owner'> },
+) {
+  return request<WorkspaceMemberResponse>(`/api/workspaces/${workspaceId}/members`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function updateWorkspaceMember(
+  workspaceId: number,
+  memberId: number,
+  payload: { role: Exclude<WorkspaceRole, 'owner'> },
+) {
+  return request<WorkspaceMemberResponse>(`/api/workspaces/${workspaceId}/members/${memberId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function deleteWorkspaceMember(workspaceId: number, memberId: number) {
+  return request<void>(`/api/workspaces/${workspaceId}/members/${memberId}`, {
+    method: 'DELETE',
+  })
+}
+
+export function fetchWorkspaceInvitations(workspaceId: number) {
+  return request<WorkspaceInvitationListResponse>(`/api/workspaces/${workspaceId}/invitations`)
+}
+
+export function inviteWorkspaceMember(
+  workspaceId: number,
+  payload: { email: string; role: Exclude<WorkspaceRole, 'owner'> },
+) {
+  return request<WorkspaceMemberResponse | WorkspaceInvitationResponse>(
+    `/api/workspaces/${workspaceId}/invitations`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  )
+}
+
+export function fetchWorkspaceInvitation(token: string) {
+  return request<WorkspaceInvitationResponse>(`/api/invitations/${token}`)
+}
+
+export function acceptWorkspaceInvitation(
+  token: string,
+  payload: { name: string; password: string; passwordConfirmation: string },
+) {
+  return request<AuthResponse>(`/api/invitations/${token}/accept`, {
+    method: 'POST',
+    body: JSON.stringify({
+      name: payload.name,
+      password: payload.password,
+      password_confirmation: payload.passwordConfirmation,
+    }),
+  })
 }
 
 export function fetchCustomers(workspaceId: number) {

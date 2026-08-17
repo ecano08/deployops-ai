@@ -52,6 +52,10 @@ const viewMeta: Record<AppView, { title: string; description: string }> = {
     title: 'Dashboard',
     description: 'Deployment overview, integrations health, and operational signals for your workspace.',
   },
+  team: {
+    title: 'Team',
+    description: 'Manage workspace members, roles, and access for your organization.',
+  },
   integrations: {
     title: 'Integrations',
     description: 'Manage connected systems and test API connections for the active deployment.',

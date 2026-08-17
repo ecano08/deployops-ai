@@ -15,6 +15,7 @@ import {
   deleteEvaluationDataset,
   deleteIntegration,
   deleteKnowledgeDocument,
+  deleteWorkspaceMember,
   fetchAiHealth,
   fetchAiTraces,
   fetchCurrentUser,
@@ -26,9 +27,11 @@ import {
   fetchIntegrations,
   fetchKnowledgeDocuments,
   fetchPendingAiActions,
+  fetchWorkspaceInvitations,
   fetchWorkspaceMembers,
   fetchWorkspaces,
   getToken,
+  inviteWorkspaceMember,
   logout,
   rejectAiAction,
   runEvaluationDataset,
@@ -39,6 +42,7 @@ import {
   updateEvaluationCase,
   updateEvaluationDataset,
   updateIntegration,
+  updateWorkspaceMember,
   uploadKnowledgeDocument,
 } from './api'
 import { AppLayout } from './components/layout/AppLayout'
@@ -47,6 +51,7 @@ import { EmptyState } from './components/ui/EmptyState'
 import { LoadingState } from './components/ui/LoadingState'
 import { canManageCustomers, canManageDeployments } from './lib/permissions'
 import { apiErrorReference } from './lib/apiError'
+import { AcceptInvitationPage } from './pages/AcceptInvitationPage'
 import { ApprovalsPage } from './pages/ApprovalsPage'
 import { AuthPage } from './pages/AuthPage'
 import { CopilotPage } from './pages/CopilotPage'
@@ -55,21 +60,26 @@ import { EvalsPage } from './pages/EvalsPage'
 import { IntegrationsPage } from './pages/IntegrationsPage'
 import { KnowledgePage } from './pages/KnowledgePage'
 import { ObservabilityPage } from './pages/ObservabilityPage'
-import type {
-  AiHealthSummary,
-  AiProposedAction,
-  AiTrace,
-  Customer,
-  Deployment,
-  DeploymentIntegration,
-  DeploymentStage,
-  EvaluationDataset,
-  EvaluationRun,
-  Incident,
-  KnowledgeDocument,
-  User,
-  Workspace,
-  WorkspaceMember,
+import { TeamPage } from './pages/TeamPage'
+import {
+  isWorkspaceInvitation,
+  type AiHealthSummary,
+  type AiProposedAction,
+  type AiTrace,
+  type Customer,
+  type Deployment,
+  type DeploymentIntegration,
+  type DeploymentStage,
+  type EvaluationDataset,
+  type EvaluationRun,
+  type Incident,
+  type InviteWorkspaceMemberResult,
+  type KnowledgeDocument,
+  type User,
+  type Workspace,
+  type WorkspaceInvitation,
+  type WorkspaceMember,
+  type WorkspaceRole,
 } from './types'
 
 type HealthResponse = {
@@ -79,6 +89,12 @@ type HealthResponse = {
     status: string
     service: string
   }
+}
+
+function invitationTokenFromPath(): string | null {
+  const match = window.location.pathname.match(/^\/invitations\/([^/]+)$/)
+
+  return match ? decodeURIComponent(match[1]) : null
 }
 
 function App() {
@@ -92,6 +108,10 @@ function App() {
   const [members, setMembers] = useState<WorkspaceMember[]>([])
   const [membersError, setMembersError] = useState<string | null>(null)
   const [membersLoading, setMembersLoading] = useState(false)
+  const [invitations, setInvitations] = useState<WorkspaceInvitation[]>([])
+  const [invitationsError, setInvitationsError] = useState<string | null>(null)
+  const [teamMessage, setTeamMessage] = useState<string | null>(null)
+  const [invitationToken, setInvitationToken] = useState(() => invitationTokenFromPath())
   const [customers, setCustomers] = useState<Customer[]>([])
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null)
   const [customersError, setCustomersError] = useState<string | null>(null)
@@ -258,6 +278,57 @@ function App() {
     }
   }, [selectedWorkspaceId, selectedCustomerId, selectedDeploymentId])
 
+  const refreshTeamData = useCallback(async (isCancelled: () => boolean = () => false) => {
+    if (selectedWorkspaceId === null) {
+      return
+    }
+
+    const workspaceId = selectedWorkspaceId
+
+    await Promise.all([
+      fetchWorkspaceMembers(workspaceId)
+        .then((response) => {
+          if (isCancelled()) {
+            return
+          }
+
+          setMembers(response.data)
+          setMembersError(null)
+        })
+        .catch((error: unknown) => {
+          if (isCancelled()) {
+            return
+          }
+
+          setMembers([])
+          setMembersError(error instanceof Error ? error.message : 'Failed to load members.')
+        }),
+      fetchWorkspaceInvitations(workspaceId)
+        .then((response) => {
+          if (isCancelled()) {
+            return
+          }
+
+          setInvitations(response.data)
+          setInvitationsError(null)
+        })
+        .catch((error: unknown) => {
+          if (isCancelled()) {
+            return
+          }
+
+          setInvitations([])
+          setInvitationsError(
+            error instanceof Error ? error.message : 'Failed to load invitations.',
+          )
+        }),
+    ])
+
+    if (!isCancelled()) {
+      setMembersLoading(false)
+    }
+  }, [selectedWorkspaceId])
+
   const handleAuthenticated = () => {
     setLoadingUser(true)
 
@@ -278,7 +349,7 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (!getToken()) {
+    if (invitationTokenFromPath() || !getToken()) {
       return
     }
 
@@ -329,29 +400,51 @@ function App() {
 
     let cancelled = false
 
-    fetchWorkspaceMembers(selectedWorkspaceId)
-      .then((response) => {
-        if (!cancelled) {
-          setMembers(response.data)
-          setMembersError(null)
-        }
-      })
-      .catch((error: Error) => {
-        if (!cancelled) {
-          setMembers([])
-          setMembersError(error.message)
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setMembersLoading(false)
-        }
-      })
+    void Promise.resolve().then(() => refreshTeamData(() => cancelled))
 
     return () => {
       cancelled = true
     }
-  }, [user, selectedWorkspaceId])
+  }, [user, selectedWorkspaceId, refreshTeamData])
+
+  useEffect(() => {
+    if (activeView !== 'team' || !user || selectedWorkspaceId === null) {
+      return
+    }
+
+    let cancelled = false
+
+    void Promise.resolve().then(() => refreshTeamData(() => cancelled))
+
+    const intervalId = window.setInterval(() => {
+      void refreshTeamData(() => cancelled)
+    }, 4000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+    }
+  }, [activeView, user, selectedWorkspaceId, refreshTeamData])
+
+  useEffect(() => {
+    if (!user || selectedWorkspaceId === null) {
+      return
+    }
+
+    const handleVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshTeamData()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisible)
+    window.addEventListener('focus', handleVisible)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisible)
+      window.removeEventListener('focus', handleVisible)
+    }
+  }, [user, selectedWorkspaceId, refreshTeamData])
 
   useEffect(() => {
     if (!user || selectedWorkspaceId === null) {
@@ -828,6 +921,9 @@ function App() {
     setMembers([])
     setMembersError(null)
     setMembersLoading(true)
+    setInvitations([])
+    setInvitationsError(null)
+    setTeamMessage(null)
     setCustomers([])
     setCustomersError(null)
     setCustomersLoading(true)
@@ -857,6 +953,67 @@ function App() {
     setAiHealthLoading(true)
     setAiTracesLoading(true)
     setIncidentsLoading(true)
+  }
+
+  async function handleInviteWorkspaceMember(payload: {
+    email: string
+    role: Exclude<WorkspaceRole, 'owner'>
+  }): Promise<InviteWorkspaceMemberResult> {
+    if (selectedWorkspaceId === null) {
+      throw new Error('No workspace selected.')
+    }
+
+    setTeamMessage(null)
+    const response = await inviteWorkspaceMember(selectedWorkspaceId, payload)
+    const result = response.data
+
+    if (isWorkspaceInvitation(result)) {
+      setInvitations((current) =>
+        [...current.filter((invitation) => invitation.email !== result.email), result].sort((left, right) =>
+          left.email.localeCompare(right.email),
+        ),
+      )
+      setTeamMessage(`Invitation created for ${result.email}.`)
+
+      return { type: 'invitation', invitation: result }
+    }
+
+    setMembers((current) =>
+      [...current, result].sort((left, right) => left.name.localeCompare(right.name)),
+    )
+    setInvitations((current) => current.filter((invitation) => invitation.email !== result.email))
+    setTeamMessage(`Added ${result.name} as ${result.role}.`)
+
+    return { type: 'member', member: result }
+  }
+
+  async function handleUpdateWorkspaceMemberRole(
+    memberId: number,
+    role: Exclude<WorkspaceRole, 'owner'>,
+  ) {
+    if (selectedWorkspaceId === null) {
+      return
+    }
+
+    setTeamMessage(null)
+    const response = await updateWorkspaceMember(selectedWorkspaceId, memberId, { role })
+    setMembers((current) =>
+      current
+        .map((member) => (member.id === memberId ? response.data : member))
+        .sort((left, right) => left.name.localeCompare(right.name)),
+    )
+    setTeamMessage(`Updated ${response.data.name}'s role to ${response.data.role}.`)
+  }
+
+  async function handleRemoveWorkspaceMember(memberId: number) {
+    if (selectedWorkspaceId === null) {
+      return
+    }
+
+    setTeamMessage(null)
+    await deleteWorkspaceMember(selectedWorkspaceId, memberId)
+    setMembers((current) => current.filter((member) => member.id !== memberId))
+    setTeamMessage('Member removed from workspace.')
   }
 
   async function handleCreateWorkspace(name: string) {
@@ -1435,6 +1592,7 @@ function App() {
     setSelectedWorkspaceId(null)
     setSelectedCustomerId(null)
     setMembers([])
+    setInvitations([])
     setCustomers([])
     setDeployments([])
     setSelectedDeploymentId(null)
@@ -1462,6 +1620,21 @@ function App() {
             pendingActions={pendingAiActions}
             incidents={incidents}
             incidentsLoading={incidentsLoading}
+          />
+        )
+      case 'team':
+        return (
+          <TeamPage
+            workspace={selectedWorkspace}
+            members={members}
+            invitations={invitations}
+            loading={membersLoading}
+            error={membersError}
+            invitationsError={invitationsError}
+            message={teamMessage}
+            onInviteMember={handleInviteWorkspaceMember}
+            onUpdateMemberRole={handleUpdateWorkspaceMemberRole}
+            onRemoveMember={handleRemoveWorkspaceMember}
           />
         )
       case 'integrations':
@@ -1563,6 +1736,8 @@ function App() {
   }
 
   function renderContextEmptyState() {
+    const workspaceLevelViews: AppView[] = ['dashboard', 'team']
+
     if (customersLoading || deploymentsLoading) {
       return <LoadingState label="Loading context…" />
     }
@@ -1571,7 +1746,11 @@ function App() {
       return <p role="alert">{customersError}</p>
     }
 
-    if (selectedWorkspace && customers.length === 0) {
+    if (
+      selectedWorkspace &&
+      customers.length === 0 &&
+      !workspaceLevelViews.includes(activeView)
+    ) {
       return (
         <EmptyState
           title="No customers yet"
@@ -1591,7 +1770,11 @@ function App() {
       return <p role="alert">{deploymentsError}</p>
     }
 
-    if (selectedCustomer && deployments.length === 0 && activeView !== 'dashboard') {
+    if (
+      selectedCustomer &&
+      deployments.length === 0 &&
+      !workspaceLevelViews.includes(activeView)
+    ) {
       return (
         <EmptyState
           title="No deployments yet"
@@ -1611,6 +1794,25 @@ function App() {
   }
 
   const contextEmptyState = renderContextEmptyState()
+
+  if (invitationToken) {
+    return (
+      <AcceptInvitationPage
+        token={invitationToken}
+        onAccepted={() => {
+          setInvitationToken(null)
+          setSelectedWorkspaceId(null)
+          setMembers([])
+          setInvitations([])
+          setMembersError(null)
+          setInvitationsError(null)
+          setTeamMessage(null)
+          setActiveView('team')
+          handleAuthenticated()
+        }}
+      />
+    )
+  }
 
   if (loadingUser) {
     return (

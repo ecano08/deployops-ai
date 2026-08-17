@@ -11,3 +11,7 @@ export function canManageDeployments(role: WorkspaceRole | null | undefined): bo
 export function canApproveAiActions(role: WorkspaceRole | null | undefined): boolean {
   return role === 'owner' || role === 'admin'
 }
+
+export function canManageMembers(role: WorkspaceRole | null | undefined): boolean {
+  return role === 'owner' || role === 'admin'
+}

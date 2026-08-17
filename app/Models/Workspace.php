@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\WorkspaceInvitationStatus;
 use App\Enums\WorkspaceRole;
 use Database\Factories\WorkspaceFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -38,11 +39,36 @@ class Workspace extends Model
     }
 
     /**
+     * @return HasMany<WorkspaceInvitation, $this>
+     */
+    public function invitations(): HasMany
+    {
+        return $this->hasMany(WorkspaceInvitation::class);
+    }
+
+    /**
      * @return HasMany<Customer, $this>
      */
     public function customers(): HasMany
     {
         return $this->hasMany(Customer::class);
+    }
+
+    public function addMemberWithRole(User $user, WorkspaceRole $role): User
+    {
+        $this->members()->attach($user->id, [
+            'role' => $role->value,
+        ]);
+
+        $this->invitations()
+            ->where('email', $user->email)
+            ->where('status', WorkspaceInvitationStatus::Pending)
+            ->update([
+                'status' => WorkspaceInvitationStatus::Accepted,
+                'accepted_at' => now(),
+            ]);
+
+        return $this->members()->whereKey($user->id)->firstOrFail();
     }
 
     /**

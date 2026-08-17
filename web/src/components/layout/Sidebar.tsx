@@ -7,11 +7,13 @@ import {
   LayoutDashboard,
   Plug,
   Radar,
+  Users,
 } from 'lucide-react'
 import { Icon } from '../ui/Icon'
 
 export type AppView =
   | 'dashboard'
+  | 'team'
   | 'integrations'
   | 'copilot'
   | 'knowledge'
@@ -27,6 +29,7 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'team', label: 'Team', icon: Users },
   { id: 'integrations', label: 'Integrations', icon: Plug },
   { id: 'copilot', label: 'Copilot', icon: Bot },
   { id: 'knowledge', label: 'Knowledge', icon: BookOpen },

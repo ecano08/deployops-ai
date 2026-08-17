@@ -40,6 +40,46 @@ export type WorkspaceMemberListResponse = {
   data: WorkspaceMember[]
 }
 
+export type WorkspaceMemberResponse = {
+  data: WorkspaceMember
+}
+
+export type WorkspaceInvitation = {
+  id: number
+  email: string
+  role: Exclude<WorkspaceRole, 'owner'>
+  status: 'pending' | 'accepted'
+  expires_at: string
+  invitation_url?: string
+  workspace?: {
+    name: string
+  }
+}
+
+export type WorkspaceInvitationListResponse = {
+  data: WorkspaceInvitation[]
+}
+
+export type WorkspaceInvitationResponse = {
+  data: WorkspaceInvitation
+}
+
+export type InviteWorkspaceMemberResult =
+  | { type: 'member'; member: WorkspaceMember }
+  | { type: 'invitation'; invitation: WorkspaceInvitation }
+
+export function isWorkspaceInvitation(
+  data: WorkspaceMember | WorkspaceInvitation,
+): data is WorkspaceInvitation {
+  return 'status' in data && 'expires_at' in data
+}
+
+export const ASSIGNABLE_WORKSPACE_ROLES: Exclude<WorkspaceRole, 'owner'>[] = [
+  'admin',
+  'engineer',
+  'viewer',
+]
+
 export type DeploymentStage =
   | 'discovery'
   | 'integration'
