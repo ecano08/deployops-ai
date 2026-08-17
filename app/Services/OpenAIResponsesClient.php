@@ -161,6 +161,36 @@ class OpenAIResponsesClient
     }
 
     /**
+     * @return array{type: string, role: string, content: array<int, array{type: string, text: string}>}
+     */
+    public function assistantMessageItem(string $text): array
+    {
+        return [
+            'type' => 'message',
+            'role' => 'assistant',
+            'content' => [
+                [
+                    'type' => 'output_text',
+                    'text' => $text,
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * @return array{type: string, call_id: string, name: string, arguments: string}
+     */
+    public function functionCallItem(string $callId, string $name, string $arguments): array
+    {
+        return [
+            'type' => 'function_call',
+            'call_id' => $callId,
+            'name' => $name,
+            'arguments' => $arguments,
+        ];
+    }
+
+    /**
      * @param  array<string, mixed>  $response
      * @return array<int, array<string, mixed>>
      */

@@ -33,6 +33,22 @@ class KnowledgeDocumentPolicy
     }
 
     /**
+     * Determine whether the user can activate the model.
+     */
+    public function activate(User $user, KnowledgeDocument $document): bool
+    {
+        return $user->can('manageDeployments', $document->workspace);
+    }
+
+    /**
+     * Determine whether the user can archive the model.
+     */
+    public function archive(User $user, KnowledgeDocument $document): bool
+    {
+        return $user->can('manageDeployments', $document->workspace);
+    }
+
+    /**
      * Determine whether the user can delete the model.
      */
     public function delete(User $user, KnowledgeDocument $document): bool

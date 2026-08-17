@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Bot, Layers, Send, Sparkles } from 'lucide-react'
+import { Bot, Layers, MessageSquarePlus, Send, Sparkles } from 'lucide-react'
 import { Alert } from '../components/ui/Alert'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
@@ -8,30 +8,30 @@ import { EmptyState } from '../components/ui/EmptyState'
 import { FormField } from '../components/ui/FormField'
 import { Icon } from '../components/ui/Icon'
 import { required } from '../lib/validation'
-import type { Deployment } from '../types'
+import type { CopilotTurn, Deployment } from '../types'
 
 type CopilotPageProps = {
   deployment: Deployment | null
   question: string
-  answer: string | null
-  toolsUsed: string[]
+  turns: CopilotTurn[]
   error: string | null
   errorReference?: string | null
   loading: boolean
   onQuestionChange: (value: string) => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>
+  onNewConversation: () => void
 }
 
 export function CopilotPage({
   deployment,
   question,
-  answer,
-  toolsUsed,
+  turns,
   error,
   errorReference = null,
   loading,
   onQuestionChange,
   onSubmit,
+  onNewConversation,
 }: CopilotPageProps) {
   const [suggestions] = useState([
     'What integrations are connected to this deployment?',
@@ -69,7 +69,44 @@ export function CopilotPage({
       <Card
         title="Ask the copilot"
         description={`Deployment context: ${deployment.name} (${deployment.stage})`}
+        actions={
+          turns.length > 0 ? (
+            <Button type="button" variant="ghost" size="sm" onClick={onNewConversation}>
+              <Icon icon={MessageSquarePlus} size="xs" />
+              New conversation
+            </Button>
+          ) : undefined
+        }
       >
+        {turns.length > 0 && (
+          <div className="copilot-thread" aria-live="polite">
+            {turns.map((turn) => (
+              <article key={turn.id} className="copilot-turn">
+                <div className="copilot-turn__message copilot-turn__message--user">
+                  <span className="copilot-turn__role">You</span>
+                  <p>{turn.question}</p>
+                </div>
+                <div className="copilot-turn__message copilot-turn__message--assistant">
+                  <span className="copilot-turn__role">Copilot</span>
+                  <div className="copilot-answer">
+                    <p>{turn.answer}</p>
+                  </div>
+                  {turn.toolsUsed.length > 0 && (
+                    <div className="tool-tags">
+                      <span className="tool-tags__label">Tools used:</span>
+                      {turn.toolsUsed.map((tool) => (
+                        <Badge key={tool} variant="info">
+                          {tool}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+
         <form className="form form--wide" onSubmit={handleSubmit} noValidate>
           <FormField label="Your question" error={questionError}>
             <textarea
@@ -122,25 +159,7 @@ export function CopilotPage({
         )}
       </Card>
 
-      {answer && (
-        <Card title="Response">
-          <div className="copilot-answer">
-            <p>{answer}</p>
-          </div>
-          {toolsUsed.length > 0 && (
-            <div className="tool-tags">
-              <span className="tool-tags__label">Tools used:</span>
-              {toolsUsed.map((tool) => (
-                <Badge key={tool} variant="info">
-                  {tool}
-                </Badge>
-              ))}
-            </div>
-          )}
-        </Card>
-      )}
-
-      {!answer && !loading && (
+      {turns.length === 0 && !loading && (
         <EmptyState
           title="Ready to assist"
           description="Ask a question about this deployment to get AI-powered operational insights."

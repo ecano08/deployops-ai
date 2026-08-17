@@ -22,7 +22,7 @@ import type {
   Deployment,
   DeploymentIntegration,
   Incident,
-  KnowledgeDocument,
+  KnowledgeDocumentLibraryStats,
   Workspace,
   WorkspaceMember,
 } from '../types'
@@ -42,8 +42,8 @@ type DashboardPageProps = {
   deployments: Deployment[]
   integrations: DeploymentIntegration[]
   integrationsLoading: boolean
-  knowledgeDocuments: KnowledgeDocument[]
-  knowledgeLoading: boolean
+  knowledgeStats: KnowledgeDocumentLibraryStats | null
+  knowledgeStatsLoading: boolean
   aiHealth: AiHealthSummary | null
   aiHealthLoading: boolean
   pendingActions: AiProposedAction[]
@@ -55,8 +55,12 @@ function countConnectedIntegrations(integrations: DeploymentIntegration[]): numb
   return integrations.filter((i) => i.status.toLowerCase() === 'connected').length
 }
 
-function countReadyDocuments(documents: KnowledgeDocument[]): number {
-  return documents.filter((d) => d.status.toLowerCase() === 'ready').length
+function countReadyDocuments(stats: KnowledgeDocumentLibraryStats | null): number {
+  return stats?.ready_count ?? 0
+}
+
+function countRevisionTotal(stats: KnowledgeDocumentLibraryStats | null): number {
+  return stats?.revision_total ?? 0
 }
 
 export function DashboardPage({
@@ -69,8 +73,8 @@ export function DashboardPage({
   deployments,
   integrations,
   integrationsLoading,
-  knowledgeDocuments,
-  knowledgeLoading,
+  knowledgeStats,
+  knowledgeStatsLoading,
   aiHealth,
   aiHealthLoading,
   pendingActions,
@@ -89,7 +93,8 @@ export function DashboardPage({
 
   const openIncidents = incidents.filter((incident) => incident.status !== 'resolved')
   const connectedIntegrations = countConnectedIntegrations(integrations)
-  const readyDocuments = countReadyDocuments(knowledgeDocuments)
+  const readyDocuments = countReadyDocuments(knowledgeStats)
+  const revisionTotal = countRevisionTotal(knowledgeStats)
   const recentIncidents = [...incidents]
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, 4)
@@ -135,7 +140,7 @@ export function DashboardPage({
               </span>
             </div>
             <p className="stat-value">
-              {knowledgeLoading ? '…' : `${readyDocuments}/${knowledgeDocuments.length}`}
+              {knowledgeStatsLoading ? '…' : `${readyDocuments}/${revisionTotal}`}
             </p>
             <p className="stat-label">indexed & ready</p>
           </div>

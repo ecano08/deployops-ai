@@ -65,8 +65,8 @@ const viewMeta: Record<AppView, { title: string; description: string }> = {
     description: 'Ask operational questions grounded in deployment context, knowledge, and live data.',
   },
   knowledge: {
-    title: 'Knowledge Base',
-    description: 'Upload and manage documents indexed for copilot retrieval-augmented generation.',
+    title: 'Project Documentation',
+    description: 'Upload and govern engineering documents indexed for copilot when active and ready.',
   },
   evals: {
     title: 'AI Evaluations',

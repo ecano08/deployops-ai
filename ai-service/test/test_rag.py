@@ -120,6 +120,8 @@ def test_search_returns_scoped_results(mock_vector_store: MagicMock, mock_embedd
         deployment_id=3,
         query_embedding=[0.3] * 1536,
         top_k=3,
+        document_ids=None,
+        lexical_terms=[],
     )
 
 

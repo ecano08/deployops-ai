@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import {
   approveAiAction,
   askCopilot,
@@ -14,6 +14,8 @@ import {
   deleteEvaluationCase,
   deleteEvaluationDataset,
   deleteIntegration,
+  activateKnowledgeDocument,
+  archiveKnowledgeDocument,
   deleteKnowledgeDocument,
   deleteWorkspaceMember,
   fetchAiHealth,
@@ -26,6 +28,7 @@ import {
   fetchIncidents,
   fetchIntegrations,
   fetchKnowledgeDocuments,
+  fetchKnowledgeDocumentMatchCandidates,
   fetchPendingAiActions,
   fetchWorkspaceInvitations,
   fetchWorkspaceMembers,
@@ -66,6 +69,7 @@ import {
   type AiHealthSummary,
   type AiProposedAction,
   type AiTrace,
+  type CopilotTurn,
   type Customer,
   type Deployment,
   type DeploymentIntegration,
@@ -74,7 +78,7 @@ import {
   type EvaluationRun,
   type Incident,
   type InviteWorkspaceMemberResult,
-  type KnowledgeDocument,
+  type KnowledgeDocumentLibraryStats,
   type User,
   type Workspace,
   type WorkspaceInvitation,
@@ -124,17 +128,14 @@ function App() {
   const [integrationsError, setIntegrationsError] = useState<string | null>(null)
   const [integrationsLoading, setIntegrationsLoading] = useState(false)
   const [integrationTestMessage, setIntegrationTestMessage] = useState<string | null>(null)
-  const [knowledgeDocuments, setKnowledgeDocuments] = useState<KnowledgeDocument[]>([])
-  const [knowledgeError, setKnowledgeError] = useState<string | null>(null)
-  const [knowledgeLoading, setKnowledgeLoading] = useState(false)
+  const [knowledgeStats, setKnowledgeStats] = useState<KnowledgeDocumentLibraryStats | null>(null)
+  const [knowledgeStatsLoading, setKnowledgeStatsLoading] = useState(false)
   const [knowledgeMessage, setKnowledgeMessage] = useState<string | null>(null)
   const [copilotQuestion, setCopilotQuestion] = useState('')
-  const [copilotAnswer, setCopilotAnswer] = useState<string | null>(null)
-  const [copilotToolsUsed, setCopilotToolsUsed] = useState<string[]>([])
+  const [copilotTurns, setCopilotTurns] = useState<CopilotTurn[]>([])
   const [copilotError, setCopilotError] = useState<string | null>(null)
   const [copilotErrorReference, setCopilotErrorReference] = useState<string | null>(null)
   const [copilotLoading, setCopilotLoading] = useState(false)
-  const knowledgePollInFlight = useRef(false)
   const [evaluationDatasets, setEvaluationDatasets] = useState<EvaluationDataset[]>([])
   const [evaluationDatasetsError, setEvaluationDatasetsError] = useState<string | null>(null)
   const [evaluationDatasetsLoading, setEvaluationDatasetsLoading] = useState(false)
@@ -552,22 +553,22 @@ function App() {
 
     let cancelled = false
 
-    fetchKnowledgeDocuments(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId)
+    fetchKnowledgeDocuments(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId, {
+      per_page: 1,
+    })
       .then((response) => {
         if (!cancelled) {
-          setKnowledgeDocuments(response.data)
-          setKnowledgeError(null)
+          setKnowledgeStats(response.stats)
         }
       })
-      .catch((error: Error) => {
+      .catch(() => {
         if (!cancelled) {
-          setKnowledgeDocuments([])
-          setKnowledgeError(error.message)
+          setKnowledgeStats(null)
         }
       })
       .finally(() => {
         if (!cancelled) {
-          setKnowledgeLoading(false)
+          setKnowledgeStatsLoading(false)
         }
       })
 
@@ -575,55 +576,6 @@ function App() {
       cancelled = true
     }
   }, [user, selectedWorkspaceId, selectedCustomerId, selectedDeploymentId])
-
-  useEffect(() => {
-    if (
-      !user ||
-      selectedWorkspaceId === null ||
-      selectedCustomerId === null ||
-      selectedDeploymentId === null
-    ) {
-      return
-    }
-
-    const hasProcessingDocuments = knowledgeDocuments.some((document) => {
-      const status = document.status.toLowerCase()
-      return status === 'pending' || status === 'processing'
-    })
-
-    if (!hasProcessingDocuments) {
-      return
-    }
-
-    const intervalId = window.setInterval(() => {
-      if (knowledgePollInFlight.current) {
-        return
-      }
-
-      knowledgePollInFlight.current = true
-
-      fetchKnowledgeDocuments(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId)
-        .then((response) => {
-          setKnowledgeDocuments(response.data)
-        })
-        .catch(() => {
-          // Keep the current list visible if a poll request fails transiently.
-        })
-        .finally(() => {
-          knowledgePollInFlight.current = false
-        })
-    }, 2500)
-
-    return () => {
-      window.clearInterval(intervalId)
-    }
-  }, [
-    user,
-    selectedWorkspaceId,
-    selectedCustomerId,
-    selectedDeploymentId,
-    knowledgeDocuments,
-  ])
 
   useEffect(() => {
     if (!user || selectedWorkspaceId === null || selectedCustomerId === null || selectedDeploymentId === null) {
@@ -882,14 +834,13 @@ function App() {
     setIntegrationsError(null)
     setIntegrationsLoading(false)
     setIntegrationTestMessage(null)
-    setKnowledgeDocuments([])
-    setKnowledgeError(null)
-    setKnowledgeLoading(false)
+    setKnowledgeStats(null)
+    setKnowledgeStatsLoading(false)
     setKnowledgeMessage(null)
     setCopilotQuestion('')
-    setCopilotAnswer(null)
-    setCopilotToolsUsed([])
+    setCopilotTurns([])
     setCopilotError(null)
+    setCopilotErrorReference(null)
     setCopilotLoading(false)
     setEvaluationDatasets([])
     setEvaluationDatasetsError(null)
@@ -946,7 +897,7 @@ function App() {
     setSelectedDeploymentId(deploymentId)
     resetDeploymentState()
     setIntegrationsLoading(true)
-    setKnowledgeLoading(true)
+    setKnowledgeStatsLoading(true)
     setEvaluationDatasetsLoading(true)
     setEvaluationRunsLoading(true)
     setPendingAiActionsLoading(true)
@@ -1476,6 +1427,14 @@ function App() {
     setAiActionMessage('Action rejected.')
   }
 
+  function resetCopilotConversation() {
+    setCopilotQuestion('')
+    setCopilotTurns([])
+    setCopilotError(null)
+    setCopilotErrorReference(null)
+    setCopilotLoading(false)
+  }
+
   async function handleAskCopilot(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
@@ -1488,21 +1447,34 @@ function App() {
       return
     }
 
+    const question = copilotQuestion.trim()
+    const history = copilotTurns.map(({ question: priorQuestion, answer }) => ({
+      question: priorQuestion,
+      answer,
+    }))
+
     setCopilotLoading(true)
     setCopilotError(null)
     setCopilotErrorReference(null)
-    setCopilotAnswer(null)
-    setCopilotToolsUsed([])
 
     try {
       const response = await askCopilot(
         selectedWorkspaceId,
         selectedCustomerId,
         selectedDeploymentId,
-        copilotQuestion.trim(),
+        question,
+        history,
       )
-      setCopilotAnswer(response.data.answer)
-      setCopilotToolsUsed(response.data.tools_used)
+      setCopilotTurns((currentTurns) => [
+        ...currentTurns,
+        {
+          id: `${Date.now()}-${currentTurns.length}`,
+          question,
+          answer: response.data.answer,
+          toolsUsed: response.data.tools_used,
+        },
+      ])
+      setCopilotQuestion('')
       await refreshPendingAiActions()
     } catch (error) {
       setCopilotError(error instanceof Error ? error.message : 'Copilot request failed.')
@@ -1543,7 +1515,33 @@ function App() {
     }
   }
 
-  async function handleUploadKnowledge(file: File) {
+  async function handleDetectKnowledgeMatchCandidates(filename: string, title: string) {
+    if (
+      selectedWorkspaceId === null ||
+      selectedCustomerId === null ||
+      selectedDeploymentId === null
+    ) {
+      return []
+    }
+
+    const response = await fetchKnowledgeDocumentMatchCandidates(
+      selectedWorkspaceId,
+      selectedCustomerId,
+      selectedDeploymentId,
+      { filename, title },
+    )
+
+    return response.data
+  }
+
+  async function handleUploadKnowledge(payload: {
+    file: File
+    title: string
+    document_type: string
+    version_label: string | null
+    effective_at: string | null
+    supersedes_document_id: number | null
+  }) {
     if (selectedWorkspaceId === null || selectedCustomerId === null || selectedDeploymentId === null) {
       return
     }
@@ -1555,13 +1553,63 @@ function App() {
         selectedWorkspaceId,
         selectedCustomerId,
         selectedDeploymentId,
-        file,
+        payload,
       )
-      setKnowledgeDocuments((current) => [response.data, ...current])
-      setKnowledgeMessage(`Uploaded ${response.data.original_filename}.`)
+      setKnowledgeMessage(`Uploaded ${response.data.title}.`)
+      const statsResponse = await fetchKnowledgeDocuments(
+        selectedWorkspaceId,
+        selectedCustomerId,
+        selectedDeploymentId,
+        { per_page: 1 },
+      )
+      setKnowledgeStats(statsResponse.stats)
     } catch (error) {
       setKnowledgeMessage(error instanceof Error ? error.message : 'Upload failed.')
+      throw error
     }
+  }
+
+  async function handleActivateKnowledge(documentId: number) {
+    if (selectedWorkspaceId === null || selectedCustomerId === null || selectedDeploymentId === null) {
+      return
+    }
+
+    const response = await activateKnowledgeDocument(
+      selectedWorkspaceId,
+      selectedCustomerId,
+      selectedDeploymentId,
+      documentId,
+    )
+
+    const statsResponse = await fetchKnowledgeDocuments(
+      selectedWorkspaceId,
+      selectedCustomerId,
+      selectedDeploymentId,
+      { per_page: 1 },
+    )
+    setKnowledgeStats(statsResponse.stats)
+    setKnowledgeMessage(`Activated ${response.data.title}.`)
+  }
+
+  async function handleArchiveKnowledge(documentId: number) {
+    if (selectedWorkspaceId === null || selectedCustomerId === null || selectedDeploymentId === null) {
+      return
+    }
+
+    const response = await archiveKnowledgeDocument(
+      selectedWorkspaceId,
+      selectedCustomerId,
+      selectedDeploymentId,
+      documentId,
+    )
+    const statsResponse = await fetchKnowledgeDocuments(
+      selectedWorkspaceId,
+      selectedCustomerId,
+      selectedDeploymentId,
+      { per_page: 1 },
+    )
+    setKnowledgeStats(statsResponse.stats)
+    setKnowledgeMessage(`Archived ${response.data.title}.`)
   }
 
   async function handleDeleteKnowledge(documentId: number) {
@@ -1575,7 +1623,13 @@ function App() {
       selectedDeploymentId,
       documentId,
     )
-    setKnowledgeDocuments((current) => current.filter((document) => document.id !== documentId))
+    const statsResponse = await fetchKnowledgeDocuments(
+      selectedWorkspaceId,
+      selectedCustomerId,
+      selectedDeploymentId,
+      { per_page: 1 },
+    )
+    setKnowledgeStats(statsResponse.stats)
     setKnowledgeMessage('Document deleted.')
   }
 
@@ -1613,8 +1667,8 @@ function App() {
             deployments={deployments}
             integrations={integrations}
             integrationsLoading={integrationsLoading}
-            knowledgeDocuments={knowledgeDocuments}
-            knowledgeLoading={knowledgeLoading}
+            knowledgeStats={knowledgeStats}
+            knowledgeStatsLoading={knowledgeStatsLoading}
             aiHealth={aiHealth}
             aiHealthLoading={aiHealthLoading}
             pendingActions={pendingAiActions}
@@ -1657,24 +1711,26 @@ function App() {
           <CopilotPage
             deployment={selectedDeployment}
             question={copilotQuestion}
-            answer={copilotAnswer}
-            toolsUsed={copilotToolsUsed}
+            turns={copilotTurns}
             error={copilotError}
             errorReference={copilotErrorReference}
             loading={copilotLoading}
             onQuestionChange={setCopilotQuestion}
             onSubmit={handleAskCopilot}
+            onNewConversation={resetCopilotConversation}
           />
         )
       case 'knowledge':
         return (
           <KnowledgePage
+            workspace={selectedWorkspace}
+            customer={selectedCustomer}
             deployment={selectedDeployment}
-            documents={knowledgeDocuments}
-            loading={knowledgeLoading}
-            error={knowledgeError}
             uploadMessage={knowledgeMessage}
+            onDetectMatchCandidates={handleDetectKnowledgeMatchCandidates}
             onUpload={handleUploadKnowledge}
+            onActivate={handleActivateKnowledge}
+            onArchive={handleArchiveKnowledge}
             onDelete={handleDeleteKnowledge}
           />
         )

@@ -2,9 +2,14 @@
 
 namespace App\Services;
 
+use App\Models\KnowledgeDocument;
+
 class KnowledgeSearchService
 {
-    public function __construct(private AiServiceClient $aiService) {}
+    public function __construct(
+        private AiServiceClient $aiService,
+        private KnowledgeQueryEnricher $queryEnricher,
+    ) {}
 
     /**
      * @return array<int, array{
@@ -19,12 +24,32 @@ class KnowledgeSearchService
     {
         $topK = $this->resolveTopK($topK);
 
+        $eligibleDocumentIds = KnowledgeDocument::query()
+            ->where('workspace_id', $context->workspace->id)
+            ->where('customer_id', $context->customer->id)
+            ->where('deployment_id', $context->deployment->id)
+            ->authoritativeForRag()
+            ->pluck('id')
+            ->all();
+
+        if ($eligibleDocumentIds === []) {
+            return [];
+        }
+
+        $enriched = $this->queryEnricher->enrich(
+            $query,
+            $context->currentQuestion,
+            $context->userQuestionHistory,
+        );
+
         return $this->aiService->searchKnowledge(
             $context->workspace->id,
             $context->customer->id,
             $context->deployment->id,
-            $query,
+            $enriched['query'],
             $topK,
+            $eligibleDocumentIds,
+            $enriched['lexical_terms'],
         );
     }
 

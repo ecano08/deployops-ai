@@ -75,12 +75,15 @@ def search(request: SearchRequest) -> SearchResponse:
     top_k = max(1, min(top_k, settings.max_top_k))
 
     query_embedding = embedding_client.embed_query(request.query.strip())
+    lexical_terms = request.lexical_terms or []
     results = vector_store.search(
         workspace_id=request.workspace_id,
         customer_id=request.customer_id,
         deployment_id=request.deployment_id,
         query_embedding=query_embedding,
         top_k=top_k,
+        document_ids=request.document_ids,
+        lexical_terms=lexical_terms,
     )
 
     return SearchResponse(results=[SearchResult(**result) for result in results])
