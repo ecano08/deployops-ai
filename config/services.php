@@ -39,4 +39,12 @@ return [
         'url' => env('AI_SERVICE_URL', 'http://127.0.0.1:8001'),
     ],
 
+    'openai' => [
+        'api_key' => env('OPENAI_API_KEY'),
+        'model' => env('OPENAI_MODEL', 'gpt-4.1-mini'),
+        'timeout' => env('OPENAI_TIMEOUT', 30),
+        'connect_timeout' => env('OPENAI_CONNECT_TIMEOUT', 5),
+        'max_output_tokens' => env('OPENAI_MAX_OUTPUT_TOKENS', 800),
+    ],
+
 ];

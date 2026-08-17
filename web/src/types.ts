@@ -114,3 +114,10 @@ export type IntegrationTestResponse = {
     message: string | null
   }
 }
+
+export type CopilotResponse = {
+  data: {
+    answer: string
+    tools_used: string[]
+  }
+}

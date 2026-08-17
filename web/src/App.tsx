@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import {
+  askCopilot,
   clearToken,
   createWorkspace,
   fetchCurrentUser,
@@ -48,6 +49,11 @@ function App() {
   const [integrationsError, setIntegrationsError] = useState<string | null>(null)
   const [integrationsLoading, setIntegrationsLoading] = useState(false)
   const [integrationTestMessage, setIntegrationTestMessage] = useState<string | null>(null)
+  const [copilotQuestion, setCopilotQuestion] = useState('')
+  const [copilotAnswer, setCopilotAnswer] = useState<string | null>(null)
+  const [copilotToolsUsed, setCopilotToolsUsed] = useState<string[]>([])
+  const [copilotError, setCopilotError] = useState<string | null>(null)
+  const [copilotLoading, setCopilotLoading] = useState(false)
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -242,6 +248,11 @@ function App() {
     setIntegrationsError(null)
     setIntegrationsLoading(false)
     setIntegrationTestMessage(null)
+    setCopilotQuestion('')
+    setCopilotAnswer(null)
+    setCopilotToolsUsed([])
+    setCopilotError(null)
+    setCopilotLoading(false)
   }
 
   function selectCustomer(customerId: number) {
@@ -254,6 +265,11 @@ function App() {
     setIntegrationsError(null)
     setIntegrationsLoading(false)
     setIntegrationTestMessage(null)
+    setCopilotQuestion('')
+    setCopilotAnswer(null)
+    setCopilotToolsUsed([])
+    setCopilotError(null)
+    setCopilotLoading(false)
   }
 
   function selectDeployment(deploymentId: number) {
@@ -262,6 +278,44 @@ function App() {
     setIntegrationsError(null)
     setIntegrationsLoading(true)
     setIntegrationTestMessage(null)
+    setCopilotQuestion('')
+    setCopilotAnswer(null)
+    setCopilotToolsUsed([])
+    setCopilotError(null)
+    setCopilotLoading(false)
+  }
+
+  async function handleAskCopilot(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    if (
+      selectedWorkspaceId === null ||
+      selectedCustomerId === null ||
+      selectedDeploymentId === null ||
+      copilotQuestion.trim() === ''
+    ) {
+      return
+    }
+
+    setCopilotLoading(true)
+    setCopilotError(null)
+    setCopilotAnswer(null)
+    setCopilotToolsUsed([])
+
+    try {
+      const response = await askCopilot(
+        selectedWorkspaceId,
+        selectedCustomerId,
+        selectedDeploymentId,
+        copilotQuestion.trim(),
+      )
+      setCopilotAnswer(response.data.answer)
+      setCopilotToolsUsed(response.data.tools_used)
+    } catch (error) {
+      setCopilotError(error instanceof Error ? error.message : 'Copilot request failed.')
+    } finally {
+      setCopilotLoading(false)
+    }
   }
 
   async function handleTestIntegration(integrationId: number) {
@@ -339,6 +393,11 @@ function App() {
     setIntegrationsError(null)
     setIntegrationsLoading(false)
     setIntegrationTestMessage(null)
+    setCopilotQuestion('')
+    setCopilotAnswer(null)
+    setCopilotToolsUsed([])
+    setCopilotError(null)
+    setCopilotLoading(false)
   }
 
   async function handleCreateWorkspace(event: FormEvent<HTMLFormElement>) {
@@ -589,6 +648,41 @@ function App() {
                           ))}
                         </ul>
                       )}
+
+                      <section>
+                        <h3>AI Copilot — {selectedDeployment.name}</h3>
+                        <form onSubmit={handleAskCopilot}>
+                          <label>
+                            Ask about this deployment
+                            <textarea
+                              value={copilotQuestion}
+                              onChange={(event) => setCopilotQuestion(event.target.value)}
+                              rows={3}
+                              required
+                            />
+                          </label>
+                          <button type="submit" disabled={copilotLoading}>
+                            {copilotLoading ? 'Thinking...' : 'Ask copilot'}
+                          </button>
+                        </form>
+                        {copilotError && <p>{copilotError}</p>}
+                        {copilotAnswer && (
+                          <div>
+                            <h4>Answer</h4>
+                            <p>{copilotAnswer}</p>
+                          </div>
+                        )}
+                        {copilotToolsUsed.length > 0 && (
+                          <div>
+                            <h4>Tools used</h4>
+                            <ul>
+                              {copilotToolsUsed.map((tool) => (
+                                <li key={tool}>{tool}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </section>
                     </section>
                   )}
                 </section>

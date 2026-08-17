@@ -35,5 +35,11 @@ class AppServiceProvider extends ServiceProvider
                 Limit::perMinute(30)->by($request->ip().'|integration|'.$integrationKey),
             ];
         });
+
+        RateLimiter::for('copilot', function (Request $request) {
+            $user = $request->user();
+
+            return Limit::perMinute(10)->by($user?->getKey() ?? $request->ip());
+        });
     }
 }
