@@ -149,6 +149,18 @@ class WorkspacePolicy
         return $this->operate($user, $workspace);
     }
 
+    /**
+     * Determine whether the user can approve or reject AI-proposed actions.
+     */
+    public function approveAiActions(User $user, Workspace $workspace): bool
+    {
+        if ($workspace->owner_id === $user->id) {
+            return true;
+        }
+
+        return $this->memberRole($user, $workspace)?->canApproveAiActions() ?? false;
+    }
+
     private function isProtectedOwner(Workspace $workspace, User $member): bool
     {
         if ($workspace->owner_id === $member->id) {

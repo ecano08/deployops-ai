@@ -121,3 +121,79 @@ export type CopilotResponse = {
     tools_used: string[]
   }
 }
+
+export type EvaluationCase = {
+  id: number
+  evaluation_dataset_id: number
+  input: string
+  expected_behavior: string
+  expected_tools: string[] | null
+  expected_sources: string[] | null
+}
+
+export type EvaluationDataset = {
+  id: number
+  workspace_id: number
+  customer_id: number
+  deployment_id: number
+  name: string
+  description: string | null
+  cases?: EvaluationCase[]
+}
+
+export type EvaluationRunMetrics = {
+  total_cases: number
+  passed_cases: number
+  failed_cases: number
+  pass_rate: number
+  average_latency_ms: number
+}
+
+export type EvaluationRunResult = {
+  id: number
+  evaluation_case_id: number
+  passed: boolean
+  latency_ms: number
+  tools_used: string[]
+  sources_used: string[]
+  answer: string | null
+  error_message: string | null
+  metrics: Record<string, boolean | null>
+}
+
+export type EvaluationRun = {
+  id: number
+  evaluation_dataset_id: number
+  status: string
+  metrics: EvaluationRunMetrics
+  results?: EvaluationRunResult[]
+}
+
+export type AiActionStatus = 'pending' | 'approved' | 'rejected' | 'executed' | 'failed'
+
+export type AiProposedAction = {
+  id: number
+  action_type: string
+  payload: Record<string, unknown>
+  status: AiActionStatus
+  requested_by: number
+  approved_by: number | null
+  executed_at: string | null
+  error_message: string | null
+}
+
+export type EvaluationDatasetListResponse = {
+  data: EvaluationDataset[]
+}
+
+export type EvaluationRunListResponse = {
+  data: EvaluationRun[]
+}
+
+export type EvaluationRunResponse = {
+  data: EvaluationRun
+}
+
+export type AiProposedActionListResponse = {
+  data: AiProposedAction[]
+}

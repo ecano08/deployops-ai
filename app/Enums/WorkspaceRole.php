@@ -28,4 +28,9 @@ enum WorkspaceRole: string
     {
         return $this->canOperate();
     }
+
+    public function canApproveAiActions(): bool
+    {
+        return $this === self::Owner || $this === self::Admin;
+    }
 }
