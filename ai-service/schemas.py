@@ -1,0 +1,42 @@
+from pydantic import BaseModel, Field
+
+
+class ProcessDocumentRequest(BaseModel):
+    workspace_id: int
+    customer_id: int
+    deployment_id: int
+    document_id: int
+    filename: str
+    mime_type: str
+    content_base64: str
+
+
+class ProcessDocumentResponse(BaseModel):
+    chunk_count: int
+
+
+class DeleteDocumentRequest(BaseModel):
+    workspace_id: int
+    customer_id: int
+    deployment_id: int
+    document_id: int
+
+
+class SearchRequest(BaseModel):
+    workspace_id: int
+    customer_id: int
+    deployment_id: int
+    query: str = Field(min_length=1)
+    top_k: int | None = None
+
+
+class SearchResult(BaseModel):
+    document_id: int
+    source_filename: str
+    chunk_index: int
+    content: str
+    score: float
+
+
+class SearchResponse(BaseModel):
+    results: list[SearchResult]

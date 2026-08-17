@@ -7,6 +7,7 @@ use App\Http\Controllers\DeploymentController;
 use App\Http\Controllers\DeploymentIntegrationController;
 use App\Http\Controllers\IntegrationActivityController;
 use App\Http\Controllers\IntegrationWebhookController;
+use App\Http\Controllers\KnowledgeDocumentController;
 use App\Http\Controllers\WorkspaceController;
 use App\Http\Controllers\WorkspaceMemberController;
 use Illuminate\Http\Client\ConnectionException;
@@ -87,4 +88,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/copilot', [CopilotController::class, 'store'])
         ->middleware('throttle:copilot')
         ->scopeBindings();
+    Route::get('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/knowledge-documents', [KnowledgeDocumentController::class, 'index'])->scopeBindings();
+    Route::post('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/knowledge-documents', [KnowledgeDocumentController::class, 'store'])->scopeBindings();
+    Route::get('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/knowledge-documents/{knowledge_document}', [KnowledgeDocumentController::class, 'show'])->scopeBindings();
+    Route::delete('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/knowledge-documents/{knowledge_document}', [KnowledgeDocumentController::class, 'destroy'])->scopeBindings();
 });

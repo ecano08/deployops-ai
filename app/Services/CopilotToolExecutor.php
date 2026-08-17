@@ -12,6 +12,8 @@ use Illuminate\Support\Facades\Gate;
 
 class CopilotToolExecutor
 {
+    public function __construct(private KnowledgeSearchService $knowledgeSearch) {}
+
     /**
      * @return array<int, array<string, mixed>>
      */
@@ -38,6 +40,7 @@ class CopilotToolExecutor
                 'list_integration_activities',
                 'List recent activity log entries for an integration in the current deployment.',
             ),
+            $this->searchKnowledgeTool(),
         ];
     }
 
@@ -63,6 +66,7 @@ class CopilotToolExecutor
         $allowedKeys = match ($name) {
             'get_customer', 'get_deployment', 'list_deployment_integrations' => [],
             'get_integration_status', 'list_integration_activities' => ['integration_id'],
+            'search_knowledge' => ['query', 'top_k'],
             default => null,
         };
 
@@ -84,6 +88,10 @@ class CopilotToolExecutor
             return null;
         }
 
+        if ($name === 'search_knowledge') {
+            return $this->validateSearchKnowledgeArguments($arguments);
+        }
+
         if (! array_key_exists('integration_id', $arguments)) {
             return ['error' => 'Missing required tool argument.'];
         }
@@ -96,6 +104,59 @@ class CopilotToolExecutor
             } else {
                 return ['error' => 'Invalid integration identifier.'];
             }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function searchKnowledgeTool(): array
+    {
+        return [
+            'type' => 'function',
+            'name' => 'search_knowledge',
+            'description' => 'Search deployment-scoped knowledge documents for relevant passages. Use before answering questions about uploaded runbooks, guides, or documentation.',
+            'strict' => true,
+            'parameters' => [
+                'type' => 'object',
+                'properties' => [
+                    'query' => [
+                        'type' => 'string',
+                        'description' => 'Natural language search query.',
+                    ],
+                    'top_k' => [
+                        'type' => 'integer',
+                        'description' => 'Maximum number of chunks to return.',
+                    ],
+                ],
+                'required' => ['query'],
+                'additionalProperties' => false,
+            ],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $arguments
+     * @return array<string, mixed>|null
+     */
+    private function validateSearchKnowledgeArguments(array $arguments): ?array
+    {
+        if (! array_key_exists('query', $arguments)) {
+            return ['error' => 'Missing required tool argument.'];
+        }
+
+        if (! is_string($arguments['query']) || trim($arguments['query']) === '') {
+            return ['error' => 'Invalid search query.'];
+        }
+
+        if (array_key_exists('top_k', $arguments) && ! is_int($arguments['top_k'])) {
+            if (is_string($arguments['top_k']) && ctype_digit($arguments['top_k'])) {
+                return null;
+            }
+
+            return ['error' => 'Invalid top_k value.'];
         }
 
         return null;
@@ -155,6 +216,7 @@ class CopilotToolExecutor
             'list_deployment_integrations' => $this->listDeploymentIntegrations($context),
             'get_integration_status' => $this->getIntegrationStatus($context, $arguments),
             'list_integration_activities' => $this->listIntegrationActivities($context, $arguments),
+            'search_knowledge' => $this->searchKnowledge($context, $arguments),
             default => [
                 'error' => 'Unknown tool.',
             ],
@@ -234,6 +296,40 @@ class CopilotToolExecutor
 
         return [
             'activities' => IntegrationActivityResource::collection($activities)->resolve(),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $arguments
+     * @return array<string, mixed>
+     */
+    private function searchKnowledge(CopilotContext $context, array $arguments): array
+    {
+        Gate::forUser($context->user)->authorize('view', $context->deployment);
+
+        $query = trim((string) $arguments['query']);
+        $topK = array_key_exists('top_k', $arguments) ? (int) $arguments['top_k'] : null;
+
+        try {
+            $results = $this->knowledgeSearch->search($context, $query, $topK);
+        } catch (\Throwable) {
+            return [
+                'error' => 'Knowledge search is temporarily unavailable.',
+            ];
+        }
+
+        return [
+            'query' => $query,
+            'results' => array_map(
+                static fn (array $result): array => [
+                    'document_id' => $result['document_id'],
+                    'source_filename' => $result['source_filename'],
+                    'chunk_index' => $result['chunk_index'],
+                    'content' => $result['content'],
+                    'score' => $result['score'],
+                ],
+                $results,
+            ),
         ];
     }
 
