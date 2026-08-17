@@ -3,6 +3,7 @@ import {
   clearToken,
   createWorkspace,
   fetchCurrentUser,
+  fetchWorkspaceMembers,
   fetchWorkspaces,
   getToken,
   login,
@@ -10,7 +11,7 @@ import {
   register,
   setToken,
 } from './api'
-import type { User, Workspace } from './types'
+import type { User, Workspace, WorkspaceMember } from './types'
 
 type HealthResponse = {
   status: string
@@ -26,6 +27,10 @@ function App() {
   const [healthError, setHealthError] = useState<string | null>(null)
   const [user, setUser] = useState<User | null>(null)
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<number | null>(null)
+  const [members, setMembers] = useState<WorkspaceMember[]>([])
+  const [membersError, setMembersError] = useState<string | null>(null)
+  const [membersLoading, setMembersLoading] = useState(false)
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -34,6 +39,7 @@ function App() {
   const [workspaceName, setWorkspaceName] = useState('')
   const [authError, setAuthError] = useState<string | null>(null)
   const [loadingUser, setLoadingUser] = useState(() => Boolean(getToken()))
+  const selectedWorkspace = workspaces.find((workspace) => workspace.id === selectedWorkspaceId) ?? null
 
   useEffect(() => {
     fetch(`${import.meta.env.VITE_API_URL}/api/health/ai`)
@@ -72,6 +78,44 @@ function App() {
       .catch((error: Error) => setAuthError(error.message))
   }, [user])
 
+  useEffect(() => {
+    if (!user || selectedWorkspaceId === null) {
+      return
+    }
+
+    let cancelled = false
+
+    fetchWorkspaceMembers(selectedWorkspaceId)
+      .then((response) => {
+        if (!cancelled) {
+          setMembers(response.data)
+          setMembersError(null)
+        }
+      })
+      .catch((error: Error) => {
+        if (!cancelled) {
+          setMembers([])
+          setMembersError(error.message)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setMembersLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [user, selectedWorkspaceId])
+
+  function selectWorkspace(workspaceId: number) {
+    setSelectedWorkspaceId(workspaceId)
+    setMembers([])
+    setMembersError(null)
+    setMembersLoading(true)
+  }
+
   async function handleAuth(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setAuthError(null)
@@ -101,6 +145,10 @@ function App() {
     clearToken()
     setUser(null)
     setWorkspaces([])
+    setSelectedWorkspaceId(null)
+    setMembers([])
+    setMembersError(null)
+    setMembersLoading(false)
   }
 
   async function handleCreateWorkspace(event: FormEvent<HTMLFormElement>) {
@@ -110,6 +158,7 @@ function App() {
     try {
       const response = await createWorkspace(workspaceName)
       setWorkspaces((current) => [response.data, ...current])
+      selectWorkspace(response.data.id)
       setWorkspaceName('')
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : 'Could not create workspace.')
@@ -238,10 +287,37 @@ function App() {
             <ul>
               {workspaces.map((workspace) => (
                 <li key={workspace.id}>
-                  {workspace.name} ({workspace.slug})
+                  <button
+                    type="button"
+                    aria-pressed={workspace.id === selectedWorkspaceId}
+                    onClick={() => selectWorkspace(workspace.id)}
+                  >
+                    {workspace.name} ({workspace.slug})
+                    {workspace.current_user_role ? ` — ${workspace.current_user_role}` : ''}
+                  </button>
                 </li>
               ))}
             </ul>
+          )}
+
+          {selectedWorkspace && (
+            <section>
+              <h2>Members — {selectedWorkspace.name}</h2>
+              {membersLoading && <p>Loading members...</p>}
+              {membersError && <p>{membersError}</p>}
+              {!membersLoading && members.length === 0 && !membersError && (
+                <p>No members to display.</p>
+              )}
+              {!membersLoading && members.length > 0 && (
+                <ul>
+                  {members.map((member) => (
+                    <li key={member.id}>
+                      {member.name} ({member.email}) — {member.role}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
           )}
         </section>
       )}

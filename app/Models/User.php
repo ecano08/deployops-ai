@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\WorkspaceRole;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -41,15 +42,35 @@ class User extends Authenticatable
     }
 
     /**
-     * @return BelongsToMany<Workspace, $this>
+     * @return BelongsToMany<Workspace, $this, WorkspaceMember>
      */
     public function workspaces(): BelongsToMany
     {
-        return $this->belongsToMany(Workspace::class)->withTimestamps();
+        return $this->belongsToMany(Workspace::class)
+            ->using(WorkspaceMember::class)
+            ->withPivot('role')
+            ->withTimestamps();
     }
 
     public function belongsToWorkspace(Workspace $workspace): bool
     {
-        return $this->workspaces()->whereKey($workspace->id)->exists();
+        return $this->roleIn($workspace) !== null;
+    }
+
+    public function roleIn(Workspace $workspace): ?WorkspaceRole
+    {
+        if ($this->relationLoaded('workspaces')) {
+            $membership = $this->workspaces->firstWhere('id', $workspace->id);
+        } else {
+            $membership = $this->workspaces()->whereKey($workspace->id)->first();
+        }
+
+        $role = $membership?->pivot?->role;
+
+        if ($role instanceof WorkspaceRole) {
+            return $role;
+        }
+
+        return is_string($role) ? WorkspaceRole::tryFrom($role) : null;
     }
 }

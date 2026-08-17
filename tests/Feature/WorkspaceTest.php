@@ -30,7 +30,8 @@ it('creates a workspace and makes the authenticated user the owner and a member'
         ->assertJsonPath('data.name', 'Acme')
         ->assertJsonPath('data.slug', 'acme')
         ->assertJsonPath('data.owner_id', $user->id)
-        ->assertJsonPath('data.owner.id', $user->id);
+        ->assertJsonPath('data.owner.id', $user->id)
+        ->assertJsonPath('data.current_user_role', 'owner');
 
     $workspace = Workspace::query()->where('slug', 'acme')->first();
 

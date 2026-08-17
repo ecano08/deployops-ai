@@ -131,6 +131,10 @@ button {
   padding: 8px;
 }
 
+button[aria-pressed='true'] {
+  border-color: var(--accent);
+}
+
 ul {
   list-style: none;
   padding: 0;
