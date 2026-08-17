@@ -1,5 +1,8 @@
 <?php
 
+use App\Enums\WorkspaceRole;
+use App\Models\User;
+use App\Models\Workspace;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -47,4 +50,30 @@ expect()->extend('toBeOne', function () {
 function something()
 {
     // ..
+}
+
+/**
+ * @return array{
+ *     workspace: Workspace,
+ *     owner: User,
+ *     admin: User,
+ *     engineer: User,
+ *     viewer: User,
+ *     stranger: User
+ * }
+ */
+function createWorkspaceWithRoles(): array
+{
+    $owner = User::factory()->create();
+    $admin = User::factory()->create();
+    $engineer = User::factory()->create();
+    $viewer = User::factory()->create();
+    $stranger = User::factory()->create();
+
+    $workspace = Workspace::factory()->create(['owner_id' => $owner->id]);
+    $workspace->members()->attach($admin, ['role' => WorkspaceRole::Admin->value]);
+    $workspace->members()->attach($engineer, ['role' => WorkspaceRole::Engineer->value]);
+    $workspace->members()->attach($viewer, ['role' => WorkspaceRole::Viewer->value]);
+
+    return compact('workspace', 'owner', 'admin', 'engineer', 'viewer', 'stranger');
 }

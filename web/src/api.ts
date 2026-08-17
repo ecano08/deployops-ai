@@ -1,5 +1,7 @@
 import type {
   AuthResponse,
+  CustomerListResponse,
+  DeploymentListResponse,
   UserResponse,
   WorkspaceListResponse,
   WorkspaceMemberListResponse,
@@ -97,4 +99,14 @@ export function createWorkspace(name: string) {
 
 export function fetchWorkspaceMembers(workspaceId: number) {
   return request<WorkspaceMemberListResponse>(`/api/workspaces/${workspaceId}/members`)
+}
+
+export function fetchCustomers(workspaceId: number) {
+  return request<CustomerListResponse>(`/api/workspaces/${workspaceId}/customers`)
+}
+
+export function fetchDeployments(workspaceId: number, customerId: number) {
+  return request<DeploymentListResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments`,
+  )
 }

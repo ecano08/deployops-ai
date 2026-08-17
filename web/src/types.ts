@@ -39,3 +39,47 @@ export type WorkspaceResponse = {
 export type WorkspaceMemberListResponse = {
   data: WorkspaceMember[]
 }
+
+export type DeploymentStage =
+  | 'discovery'
+  | 'integration'
+  | 'build'
+  | 'validation'
+  | 'deployed'
+
+export const DEPLOYMENT_STAGES: DeploymentStage[] = [
+  'discovery',
+  'integration',
+  'build',
+  'validation',
+  'deployed',
+]
+
+export type Customer = {
+  id: number
+  workspace_id: number
+  name: string
+  slug: string
+  description: string | null
+}
+
+export type Deployment = {
+  id: number
+  workspace_id: number
+  customer_id: number
+  name: string
+  description: string | null
+  stage: DeploymentStage
+}
+
+export type CustomerListResponse = {
+  data: Customer[]
+}
+
+export type CustomerResponse = {
+  data: Customer
+}
+
+export type DeploymentListResponse = {
+  data: Deployment[]
+}

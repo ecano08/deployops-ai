@@ -9,32 +9,6 @@ use Laravel\Sanctum\Sanctum;
 
 uses(LazilyRefreshDatabase::class);
 
-/**
- * @return array{
- *     workspace: Workspace,
- *     owner: User,
- *     admin: User,
- *     engineer: User,
- *     viewer: User,
- *     stranger: User
- * }
- */
-function createWorkspaceWithRoles(): array
-{
-    $owner = User::factory()->create();
-    $admin = User::factory()->create();
-    $engineer = User::factory()->create();
-    $viewer = User::factory()->create();
-    $stranger = User::factory()->create();
-
-    $workspace = Workspace::factory()->create(['owner_id' => $owner->id]);
-    $workspace->members()->attach($admin, ['role' => WorkspaceRole::Admin->value]);
-    $workspace->members()->attach($engineer, ['role' => WorkspaceRole::Engineer->value]);
-    $workspace->members()->attach($viewer, ['role' => WorkspaceRole::Viewer->value]);
-
-    return compact('workspace', 'owner', 'admin', 'engineer', 'viewer', 'stranger');
-}
-
 it('requires authentication for member endpoints', function () {
     $workspace = Workspace::factory()->create();
     $user = User::factory()->create();
