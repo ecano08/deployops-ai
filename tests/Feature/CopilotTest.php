@@ -14,48 +14,6 @@ use Laravel\Sanctum\Sanctum;
 
 uses(LazilyRefreshDatabase::class);
 
-function copilotPath(Workspace $workspace, Customer $customer, Deployment $deployment): string
-{
-    return '/api/workspaces/'.$workspace->id.'/customers/'.$customer->id.'/deployments/'.$deployment->id.'/copilot';
-}
-
-function openAiToolCallResponse(string $name, string $arguments = '{}', string $responseId = 'resp_tool'): array
-{
-    return [
-        'id' => $responseId,
-        'status' => 'completed',
-        'output' => [
-            [
-                'type' => 'function_call',
-                'call_id' => 'call_123',
-                'name' => $name,
-                'arguments' => $arguments,
-            ],
-        ],
-    ];
-}
-
-function openAiMessageResponse(string $text, string $responseId = 'resp_final'): array
-{
-    return [
-        'id' => $responseId,
-        'status' => 'completed',
-        'output_text' => $text,
-        'output' => [
-            [
-                'type' => 'message',
-                'role' => 'assistant',
-                'content' => [
-                    [
-                        'type' => 'output_text',
-                        'text' => $text,
-                    ],
-                ],
-            ],
-        ],
-    ];
-}
-
 beforeEach(function () {
     config([
         'services.openai.api_key' => 'test-openai-key',
@@ -311,7 +269,7 @@ it('sends store false on every openai responses request', function () {
 it('defines strict json schemas for all copilot tools', function () {
     $definitions = app(CopilotToolExecutor::class)->definitions();
 
-    expect($definitions)->toHaveCount(5);
+    expect($definitions)->toHaveCount(6);
 
     foreach ($definitions as $definition) {
         expect($definition['strict'] ?? null)->toBeTrue()

@@ -39,6 +39,7 @@ jobs:
       DB_DATABASE: deployops_test
       DB_USERNAME: root
       DB_PASSWORD: root
+      AI_SERVICE_TOKEN: test-ai-service-token
 
       CACHE_STORE: array
       SESSION_DRIVER: array
@@ -103,6 +104,26 @@ jobs:
   python:
     name: Python Tests
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: deployops_test
+          POSTGRES_USER: deployops
+          POSTGRES_PASSWORD: deployops
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U deployops -d deployops_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      DATABASE_URL: postgresql://deployops:deployops@127.0.0.1:5432/deployops_test
+      OPENAI_API_KEY: test-key
+      AI_SERVICE_TOKEN: test-ai-service-token
 
     defaults:
       run:

@@ -1,6 +1,8 @@
 <?php
 
 use App\Enums\WorkspaceRole;
+use App\Models\Customer;
+use App\Models\Deployment;
 use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -76,4 +78,46 @@ function createWorkspaceWithRoles(): array
     $workspace->members()->attach($viewer, ['role' => WorkspaceRole::Viewer->value]);
 
     return compact('workspace', 'owner', 'admin', 'engineer', 'viewer', 'stranger');
+}
+
+function copilotPath(Workspace $workspace, Customer $customer, Deployment $deployment): string
+{
+    return '/api/workspaces/'.$workspace->id.'/customers/'.$customer->id.'/deployments/'.$deployment->id.'/copilot';
+}
+
+function openAiToolCallResponse(string $name, string $arguments = '{}', string $responseId = 'resp_tool'): array
+{
+    return [
+        'id' => $responseId,
+        'status' => 'completed',
+        'output' => [
+            [
+                'type' => 'function_call',
+                'call_id' => 'call_123',
+                'name' => $name,
+                'arguments' => $arguments,
+            ],
+        ],
+    ];
+}
+
+function openAiMessageResponse(string $text, string $responseId = 'resp_final'): array
+{
+    return [
+        'id' => $responseId,
+        'status' => 'completed',
+        'output_text' => $text,
+        'output' => [
+            [
+                'type' => 'message',
+                'role' => 'assistant',
+                'content' => [
+                    [
+                        'type' => 'output_text',
+                        'text' => $text,
+                    ],
+                ],
+            ],
+        ],
+    ];
 }

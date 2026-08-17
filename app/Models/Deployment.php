@@ -59,4 +59,12 @@ class Deployment extends Model
     {
         return $this->integrations();
     }
+
+    /**
+     * @return HasMany<KnowledgeDocument, $this>
+     */
+    public function knowledgeDocuments(): HasMany
+    {
+        return $this->hasMany(KnowledgeDocument::class);
+    }
 }

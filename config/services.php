@@ -37,6 +37,15 @@ return [
 
     'ai_service' => [
         'url' => env('AI_SERVICE_URL', 'http://127.0.0.1:8001'),
+        'token' => env('AI_SERVICE_TOKEN'),
+        'timeout' => env('AI_SERVICE_TIMEOUT', 60),
+        'connect_timeout' => env('AI_SERVICE_CONNECT_TIMEOUT', 5),
+    ],
+
+    'knowledge' => [
+        'max_file_size_kb' => env('KNOWLEDGE_MAX_FILE_SIZE_KB', 10240),
+        'default_top_k' => env('KNOWLEDGE_DEFAULT_TOP_K', 5),
+        'max_top_k' => env('KNOWLEDGE_MAX_TOP_K', 20),
     ],
 
     'openai' => [
