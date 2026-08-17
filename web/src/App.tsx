@@ -4,6 +4,7 @@ import {
   askCopilot,
   clearToken,
   createWorkspace,
+  deleteKnowledgeDocument,
   fetchAiHealth,
   fetchAiTraces,
   fetchCurrentUser,
@@ -13,18 +14,28 @@ import {
   fetchEvaluationRuns,
   fetchIncidents,
   fetchIntegrations,
+  fetchKnowledgeDocuments,
   fetchPendingAiActions,
   fetchWorkspaceMembers,
   fetchWorkspaces,
   getToken,
-  login,
   logout,
-  register,
   rejectAiAction,
   runEvaluationDataset,
   testIntegration,
-  setToken,
+  uploadKnowledgeDocument,
 } from './api'
+import { AppLayout } from './components/layout/AppLayout'
+import type { AppView } from './components/layout/Sidebar'
+import { LoadingState } from './components/ui/LoadingState'
+import { ApprovalsPage } from './pages/ApprovalsPage'
+import { AuthPage } from './pages/AuthPage'
+import { CopilotPage } from './pages/CopilotPage'
+import { DashboardPage } from './pages/DashboardPage'
+import { EvalsPage } from './pages/EvalsPage'
+import { IntegrationsPage } from './pages/IntegrationsPage'
+import { KnowledgePage } from './pages/KnowledgePage'
+import { ObservabilityPage } from './pages/ObservabilityPage'
 import type {
   AiHealthSummary,
   AiProposedAction,
@@ -34,11 +45,11 @@ import type {
   DeploymentIntegration,
   EvaluationRun,
   Incident,
+  KnowledgeDocument,
   User,
   Workspace,
   WorkspaceMember,
 } from './types'
-import { DEPLOYMENT_STAGES } from './types'
 
 type HealthResponse = {
   status: string
@@ -50,9 +61,11 @@ type HealthResponse = {
 }
 
 function App() {
+  const [activeView, setActiveView] = useState<AppView>('dashboard')
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [health, setHealth] = useState<HealthResponse | null>(null)
-  const [healthError, setHealthError] = useState<string | null>(null)
   const [user, setUser] = useState<User | null>(null)
+  const [loadingUser, setLoadingUser] = useState(() => Boolean(getToken()))
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<number | null>(null)
   const [members, setMembers] = useState<WorkspaceMember[]>([])
@@ -70,6 +83,10 @@ function App() {
   const [integrationsError, setIntegrationsError] = useState<string | null>(null)
   const [integrationsLoading, setIntegrationsLoading] = useState(false)
   const [integrationTestMessage, setIntegrationTestMessage] = useState<string | null>(null)
+  const [knowledgeDocuments, setKnowledgeDocuments] = useState<KnowledgeDocument[]>([])
+  const [knowledgeError, setKnowledgeError] = useState<string | null>(null)
+  const [knowledgeLoading, setKnowledgeLoading] = useState(false)
+  const [knowledgeMessage, setKnowledgeMessage] = useState<string | null>(null)
   const [copilotQuestion, setCopilotQuestion] = useState('')
   const [copilotAnswer, setCopilotAnswer] = useState<string | null>(null)
   const [copilotToolsUsed, setCopilotToolsUsed] = useState<string[]>([])
@@ -93,39 +110,14 @@ function App() {
   const [incidents, setIncidents] = useState<Incident[]>([])
   const [incidentsError, setIncidentsError] = useState<string | null>(null)
   const [incidentsLoading, setIncidentsLoading] = useState(false)
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
-  const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [passwordConfirmation, setPasswordConfirmation] = useState('')
-  const [workspaceName, setWorkspaceName] = useState('')
-  const [authError, setAuthError] = useState<string | null>(null)
-  const [loadingUser, setLoadingUser] = useState(() => Boolean(getToken()))
+  const [appError, setAppError] = useState<string | null>(null)
+
   const selectedWorkspace = workspaces.find((workspace) => workspace.id === selectedWorkspaceId) ?? null
   const selectedCustomer = customers.find((customer) => customer.id === selectedCustomerId) ?? null
   const selectedDeployment = deployments.find((deployment) => deployment.id === selectedDeploymentId) ?? null
-  const deploymentsByStage = DEPLOYMENT_STAGES.reduce<Record<string, Deployment[]>>((groups, stage) => {
-    groups[stage] = deployments.filter((deployment) => deployment.stage === stage)
-    return groups
-  }, {})
 
-  useEffect(() => {
-    fetch(`${import.meta.env.VITE_API_URL}/api/health/ai`)
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`)
-        }
-
-        return response.json()
-      })
-      .then(setHealth)
-      .catch((error: Error) => setHealthError(error.message))
-  }, [])
-
-  useEffect(() => {
-    if (!getToken()) {
-      return
-    }
+  const handleAuthenticated = () => {
+    setLoadingUser(true)
 
     fetchCurrentUser()
       .then((response) => setUser(response.data))
@@ -134,6 +126,43 @@ function App() {
         setUser(null)
       })
       .finally(() => setLoadingUser(false))
+  }
+
+  useEffect(() => {
+    fetch(`${import.meta.env.VITE_API_URL}/api/health/ai`)
+      .then((response) => (response.ok ? response.json() : Promise.reject()))
+      .then(setHealth)
+      .catch(() => setHealth(null))
+  }, [])
+
+  useEffect(() => {
+    if (!getToken()) {
+      return
+    }
+
+    let cancelled = false
+
+    fetchCurrentUser()
+      .then((response) => {
+        if (!cancelled) {
+          setUser(response.data)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          clearToken()
+          setUser(null)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoadingUser(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   useEffect(() => {
@@ -142,9 +171,14 @@ function App() {
     }
 
     fetchWorkspaces()
-      .then((response) => setWorkspaces(response.data))
-      .catch((error: Error) => setAuthError(error.message))
-  }, [user])
+      .then((response) => {
+        setWorkspaces(response.data)
+        if (response.data.length > 0 && selectedWorkspaceId === null) {
+          selectWorkspace(response.data[0].id)
+        }
+      })
+      .catch((error: Error) => setAppError(error.message))
+  }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!user || selectedWorkspaceId === null) {
@@ -189,6 +223,9 @@ function App() {
         if (!cancelled) {
           setCustomers(response.data)
           setCustomersError(null)
+          if (response.data.length > 0 && selectedCustomerId === null) {
+            selectCustomer(response.data[0].id)
+          }
         }
       })
       .catch((error: Error) => {
@@ -206,7 +243,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [user, selectedWorkspaceId])
+  }, [user, selectedWorkspaceId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!user || selectedWorkspaceId === null || selectedCustomerId === null) {
@@ -220,6 +257,9 @@ function App() {
         if (!cancelled) {
           setDeployments(response.data)
           setDeploymentsError(null)
+          if (response.data.length > 0 && selectedDeploymentId === null) {
+            selectDeployment(response.data[0].id)
+          }
         }
       })
       .catch((error: Error) => {
@@ -237,7 +277,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [user, selectedWorkspaceId, selectedCustomerId])
+  }, [user, selectedWorkspaceId, selectedCustomerId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!user || selectedWorkspaceId === null || selectedCustomerId === null || selectedDeploymentId === null) {
@@ -262,6 +302,37 @@ function App() {
       .finally(() => {
         if (!cancelled) {
           setIntegrationsLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [user, selectedWorkspaceId, selectedCustomerId, selectedDeploymentId])
+
+  useEffect(() => {
+    if (!user || selectedWorkspaceId === null || selectedCustomerId === null || selectedDeploymentId === null) {
+      return
+    }
+
+    let cancelled = false
+
+    fetchKnowledgeDocuments(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId)
+      .then((response) => {
+        if (!cancelled) {
+          setKnowledgeDocuments(response.data)
+          setKnowledgeError(null)
+        }
+      })
+      .catch((error: Error) => {
+        if (!cancelled) {
+          setKnowledgeDocuments([])
+          setKnowledgeError(error.message)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setKnowledgeLoading(false)
         }
       })
 
@@ -356,9 +427,44 @@ function App() {
     }
   }, [user, selectedWorkspaceId, selectedCustomerId, selectedDeploymentId])
 
+  function resetDeploymentState() {
+    setIntegrations([])
+    setIntegrationsError(null)
+    setIntegrationsLoading(false)
+    setIntegrationTestMessage(null)
+    setKnowledgeDocuments([])
+    setKnowledgeError(null)
+    setKnowledgeLoading(false)
+    setKnowledgeMessage(null)
+    setCopilotQuestion('')
+    setCopilotAnswer(null)
+    setCopilotToolsUsed([])
+    setCopilotError(null)
+    setCopilotLoading(false)
+    setEvaluationRuns([])
+    setEvaluationRunsError(null)
+    setEvaluationRunsLoading(false)
+    setEvaluationDatasetId(null)
+    setEvaluationRunMessage(null)
+    setPendingAiActions([])
+    setPendingAiActionsError(null)
+    setPendingAiActionsLoading(false)
+    setAiActionMessage(null)
+    setAiHealth(null)
+    setAiHealthError(null)
+    setAiHealthLoading(false)
+    setAiTraces([])
+    setAiTracesError(null)
+    setAiTracesLoading(false)
+    setIncidents([])
+    setIncidentsError(null)
+    setIncidentsLoading(false)
+  }
+
   function selectWorkspace(workspaceId: number) {
     setSelectedWorkspaceId(workspaceId)
     setSelectedCustomerId(null)
+    setSelectedDeploymentId(null)
     setMembers([])
     setMembersError(null)
     setMembersLoading(true)
@@ -368,100 +474,35 @@ function App() {
     setDeployments([])
     setDeploymentsError(null)
     setDeploymentsLoading(false)
-    setSelectedDeploymentId(null)
-    setIntegrations([])
-    setIntegrationsError(null)
-    setIntegrationsLoading(false)
-    setIntegrationTestMessage(null)
-    setCopilotQuestion('')
-    setCopilotAnswer(null)
-    setCopilotToolsUsed([])
-    setCopilotError(null)
-    setCopilotLoading(false)
-    setEvaluationRuns([])
-    setEvaluationRunsError(null)
-    setEvaluationRunsLoading(false)
-    setEvaluationDatasetId(null)
-    setEvaluationRunMessage(null)
-    setPendingAiActions([])
-    setPendingAiActionsError(null)
-    setPendingAiActionsLoading(false)
-    setAiActionMessage(null)
-    setAiHealth(null)
-    setAiHealthError(null)
-    setAiHealthLoading(false)
-    setAiTraces([])
-    setAiTracesError(null)
-    setAiTracesLoading(false)
-    setIncidents([])
-    setIncidentsError(null)
-    setIncidentsLoading(false)
+    resetDeploymentState()
   }
 
   function selectCustomer(customerId: number) {
     setSelectedCustomerId(customerId)
+    setSelectedDeploymentId(null)
     setDeployments([])
     setDeploymentsError(null)
     setDeploymentsLoading(true)
-    setSelectedDeploymentId(null)
-    setIntegrations([])
-    setIntegrationsError(null)
-    setIntegrationsLoading(false)
-    setIntegrationTestMessage(null)
-    setCopilotQuestion('')
-    setCopilotAnswer(null)
-    setCopilotToolsUsed([])
-    setCopilotError(null)
-    setCopilotLoading(false)
-    setEvaluationRuns([])
-    setEvaluationRunsError(null)
-    setEvaluationRunsLoading(false)
-    setEvaluationDatasetId(null)
-    setEvaluationRunMessage(null)
-    setPendingAiActions([])
-    setPendingAiActionsError(null)
-    setPendingAiActionsLoading(false)
-    setAiActionMessage(null)
-    setAiHealth(null)
-    setAiHealthError(null)
-    setAiHealthLoading(false)
-    setAiTraces([])
-    setAiTracesError(null)
-    setAiTracesLoading(false)
-    setIncidents([])
-    setIncidentsError(null)
-    setIncidentsLoading(false)
+    resetDeploymentState()
   }
 
   function selectDeployment(deploymentId: number) {
     setSelectedDeploymentId(deploymentId)
-    setIntegrations([])
-    setIntegrationsError(null)
+    resetDeploymentState()
     setIntegrationsLoading(true)
-    setIntegrationTestMessage(null)
-    setCopilotQuestion('')
-    setCopilotAnswer(null)
-    setCopilotToolsUsed([])
-    setCopilotError(null)
-    setCopilotLoading(false)
-    setEvaluationRuns([])
-    setEvaluationRunsError(null)
+    setKnowledgeLoading(true)
     setEvaluationRunsLoading(true)
-    setEvaluationDatasetId(null)
-    setEvaluationRunMessage(null)
-    setPendingAiActions([])
-    setPendingAiActionsError(null)
     setPendingAiActionsLoading(true)
-    setAiActionMessage(null)
-    setAiHealth(null)
-    setAiHealthError(null)
     setAiHealthLoading(true)
-    setAiTraces([])
-    setAiTracesError(null)
     setAiTracesLoading(true)
-    setIncidents([])
-    setIncidentsError(null)
     setIncidentsLoading(true)
+  }
+
+  async function handleCreateWorkspace(name: string) {
+    setAppError(null)
+    const response = await createWorkspace(name)
+    setWorkspaces((current) => [response.data, ...current])
+    selectWorkspace(response.data.id)
   }
 
   async function handleRunEvaluation() {
@@ -511,14 +552,9 @@ function App() {
     }
 
     setAiActionMessage(null)
-
-    try {
-      await approveAiAction(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId, actionId)
-      await refreshPendingAiActions()
-      setAiActionMessage('Action approved and executed.')
-    } catch (error) {
-      setAiActionMessage(error instanceof Error ? error.message : 'Could not approve action.')
-    }
+    await approveAiAction(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId, actionId)
+    await refreshPendingAiActions()
+    setAiActionMessage('Action approved and executed.')
   }
 
   async function handleRejectAiAction(actionId: number) {
@@ -527,14 +563,9 @@ function App() {
     }
 
     setAiActionMessage(null)
-
-    try {
-      await rejectAiAction(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId, actionId)
-      await refreshPendingAiActions()
-      setAiActionMessage('Action rejected.')
-    } catch (error) {
-      setAiActionMessage(error instanceof Error ? error.message : 'Could not reject action.')
-    }
+    await rejectAiAction(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId, actionId)
+    await refreshPendingAiActions()
+    setAiActionMessage('Action rejected.')
   }
 
   async function handleAskCopilot(event: FormEvent<HTMLFormElement>) {
@@ -600,23 +631,40 @@ function App() {
     }
   }
 
-  async function handleAuth(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setAuthError(null)
+  async function handleUploadKnowledge(file: File) {
+    if (selectedWorkspaceId === null || selectedCustomerId === null || selectedDeploymentId === null) {
+      return
+    }
+
+    setKnowledgeMessage(null)
 
     try {
-      const response =
-        authMode === 'register'
-          ? await register(name, email, password, passwordConfirmation)
-          : await login(email, password)
-
-      setToken(response.token)
-      setUser(response.data)
-      setPassword('')
-      setPasswordConfirmation('')
+      const response = await uploadKnowledgeDocument(
+        selectedWorkspaceId,
+        selectedCustomerId,
+        selectedDeploymentId,
+        file,
+      )
+      setKnowledgeDocuments((current) => [response.data, ...current])
+      setKnowledgeMessage(`Uploaded ${response.data.original_filename}.`)
     } catch (error) {
-      setAuthError(error instanceof Error ? error.message : 'Authentication failed.')
+      setKnowledgeMessage(error instanceof Error ? error.message : 'Upload failed.')
     }
+  }
+
+  async function handleDeleteKnowledge(documentId: number) {
+    if (selectedWorkspaceId === null || selectedCustomerId === null || selectedDeploymentId === null) {
+      return
+    }
+
+    await deleteKnowledgeDocument(
+      selectedWorkspaceId,
+      selectedCustomerId,
+      selectedDeploymentId,
+      documentId,
+    )
+    setKnowledgeDocuments((current) => current.filter((document) => document.id !== documentId))
+    setKnowledgeMessage('Document deleted.')
   }
 
   async function handleLogout() {
@@ -632,457 +680,155 @@ function App() {
     setSelectedWorkspaceId(null)
     setSelectedCustomerId(null)
     setMembers([])
-    setMembersError(null)
-    setMembersLoading(false)
     setCustomers([])
-    setCustomersError(null)
-    setCustomersLoading(false)
     setDeployments([])
-    setDeploymentsError(null)
-    setDeploymentsLoading(false)
     setSelectedDeploymentId(null)
-    setIntegrations([])
-    setIntegrationsError(null)
-    setIntegrationsLoading(false)
-    setIntegrationTestMessage(null)
-    setCopilotQuestion('')
-    setCopilotAnswer(null)
-    setCopilotToolsUsed([])
-    setCopilotError(null)
-    setCopilotLoading(false)
-    setEvaluationRuns([])
-    setEvaluationRunsError(null)
-    setEvaluationRunsLoading(false)
-    setEvaluationDatasetId(null)
-    setEvaluationRunMessage(null)
-    setPendingAiActions([])
-    setPendingAiActionsError(null)
-    setPendingAiActionsLoading(false)
-    setAiActionMessage(null)
+    resetDeploymentState()
   }
 
-  async function handleCreateWorkspace(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setAuthError(null)
-
-    try {
-      const response = await createWorkspace(workspaceName)
-      setWorkspaces((current) => [response.data, ...current])
-      selectWorkspace(response.data.id)
-      setWorkspaceName('')
-    } catch (error) {
-      setAuthError(error instanceof Error ? error.message : 'Could not create workspace.')
+  function renderView() {
+    switch (activeView) {
+      case 'dashboard':
+        return (
+          <DashboardPage
+            workspace={selectedWorkspace}
+            customer={selectedCustomer}
+            deployment={selectedDeployment}
+            members={members}
+            membersLoading={membersLoading}
+            membersError={membersError}
+            deployments={deployments}
+            aiHealth={aiHealth}
+            aiHealthLoading={aiHealthLoading}
+            pendingActions={pendingAiActions}
+            incidents={incidents}
+            incidentsLoading={incidentsLoading}
+          />
+        )
+      case 'integrations':
+        return (
+          <IntegrationsPage
+            deployment={selectedDeployment}
+            integrations={integrations}
+            loading={integrationsLoading}
+            error={integrationsError}
+            testMessage={integrationTestMessage}
+            onTest={handleTestIntegration}
+          />
+        )
+      case 'copilot':
+        return (
+          <CopilotPage
+            deployment={selectedDeployment}
+            question={copilotQuestion}
+            answer={copilotAnswer}
+            toolsUsed={copilotToolsUsed}
+            error={copilotError}
+            loading={copilotLoading}
+            onQuestionChange={setCopilotQuestion}
+            onSubmit={handleAskCopilot}
+          />
+        )
+      case 'knowledge':
+        return (
+          <KnowledgePage
+            deployment={selectedDeployment}
+            documents={knowledgeDocuments}
+            loading={knowledgeLoading}
+            error={knowledgeError}
+            uploadMessage={knowledgeMessage}
+            onUpload={handleUploadKnowledge}
+            onDelete={handleDeleteKnowledge}
+          />
+        )
+      case 'evals':
+        return (
+          <EvalsPage
+            deployment={selectedDeployment}
+            runs={evaluationRuns}
+            loading={evaluationRunsLoading}
+            error={evaluationRunsError}
+            canRun={evaluationDatasetId !== null}
+            runMessage={evaluationRunMessage}
+            onRun={handleRunEvaluation}
+          />
+        )
+      case 'approvals':
+        return (
+          <ApprovalsPage
+            deployment={selectedDeployment}
+            actions={pendingAiActions}
+            loading={pendingAiActionsLoading}
+            error={pendingAiActionsError}
+            message={aiActionMessage}
+            onApprove={handleApproveAiAction}
+            onReject={handleRejectAiAction}
+          />
+        )
+      case 'observability':
+        return (
+          <ObservabilityPage
+            deployment={selectedDeployment}
+            aiHealth={aiHealth}
+            aiHealthLoading={aiHealthLoading}
+            aiHealthError={aiHealthError}
+            traces={aiTraces}
+            tracesLoading={aiTracesLoading}
+            tracesError={aiTracesError}
+            incidents={incidents}
+            incidentsLoading={incidentsLoading}
+            incidentsError={incidentsError}
+          />
+        )
+      default:
+        return null
     }
   }
 
+  if (loadingUser) {
+    return (
+      <div className="auth-page">
+        <LoadingState label="Loading session…" />
+      </div>
+    )
+  }
+
+  if (!user) {
+    return <AuthPage onAuthenticated={handleAuthenticated} />
+  }
+
   return (
-    <main>
-      <h1>DeployOps AI</h1>
-
-      {!health && !healthError && <p>Checking services...</p>}
-
-      {healthError && <p>Error: {healthError}</p>}
-
-      {health && (
-        <>
-          <p>Laravel API: {health.status}</p>
-          <p>AI Service: {health.details.status}</p>
-        </>
+    <AppLayout
+      activeView={activeView}
+      onNavigate={setActiveView}
+      sidebarOpen={sidebarOpen}
+      onSidebarToggle={() => setSidebarOpen((open) => !open)}
+      onSidebarClose={() => setSidebarOpen(false)}
+      userName={user.name}
+      userEmail={user.email}
+      apiStatus={health?.status ?? null}
+      aiStatus={health?.ai_service ?? null}
+      onLogout={handleLogout}
+      workspaces={workspaces}
+      customers={customers}
+      deployments={deployments}
+      selectedWorkspaceId={selectedWorkspaceId}
+      selectedCustomerId={selectedCustomerId}
+      selectedDeploymentId={selectedDeploymentId}
+      onWorkspaceChange={selectWorkspace}
+      onCustomerChange={selectCustomer}
+      onDeploymentChange={selectDeployment}
+      onCreateWorkspace={handleCreateWorkspace}
+      pendingApprovals={pendingAiActions.length}
+    >
+      {appError && <p role="alert">{appError}</p>}
+      {(customersLoading || deploymentsLoading) && activeView === 'dashboard' && (
+        <LoadingState label="Loading context…" />
       )}
-
-      {loadingUser && <p>Loading session...</p>}
-
-      {!loadingUser && !user && (
-        <section>
-          <h2>{authMode === 'login' ? 'Log in' : 'Register'}</h2>
-
-          <form onSubmit={handleAuth}>
-            {authMode === 'register' && (
-              <label>
-                Name
-                <input
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  autoComplete="name"
-                  required
-                />
-              </label>
-            )}
-
-            <label>
-              Email
-              <input
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                autoComplete="email"
-                required
-              />
-            </label>
-
-            <label>
-              Password
-              <input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                autoComplete={authMode === 'login' ? 'current-password' : 'new-password'}
-                required
-              />
-            </label>
-
-            {authMode === 'register' && (
-              <label>
-                Confirm password
-                <input
-                  type="password"
-                  value={passwordConfirmation}
-                  onChange={(event) => setPasswordConfirmation(event.target.value)}
-                  autoComplete="new-password"
-                  required
-                />
-              </label>
-            )}
-
-            {authError && <p>{authError}</p>}
-
-            <button type="submit">{authMode === 'login' ? 'Log in' : 'Register'}</button>
-          </form>
-
-          <p>
-            <button
-              type="button"
-              onClick={() => {
-                setAuthMode(authMode === 'login' ? 'register' : 'login')
-                setAuthError(null)
-              }}
-            >
-              {authMode === 'login' ? 'Need an account?' : 'Already have an account?'}
-            </button>
-          </p>
-        </section>
-      )}
-
-      {!loadingUser && user && (
-        <section>
-          <h2>Signed in</h2>
-          <p>
-            {user.name} ({user.email})
-          </p>
-          <p>
-            <button type="button" onClick={handleLogout}>
-              Log out
-            </button>
-          </p>
-
-          <h2>Workspaces</h2>
-
-          <form onSubmit={handleCreateWorkspace}>
-            <label>
-              New workspace
-              <input
-                value={workspaceName}
-                onChange={(event) => setWorkspaceName(event.target.value)}
-                required
-              />
-            </label>
-            <button type="submit">Create workspace</button>
-          </form>
-
-          {authError && <p>{authError}</p>}
-
-          {workspaces.length === 0 ? (
-            <p>No workspaces yet.</p>
-          ) : (
-            <ul>
-              {workspaces.map((workspace) => (
-                <li key={workspace.id}>
-                  <button
-                    type="button"
-                    aria-pressed={workspace.id === selectedWorkspaceId}
-                    onClick={() => selectWorkspace(workspace.id)}
-                  >
-                    {workspace.name} ({workspace.slug})
-                    {workspace.current_user_role ? ` — ${workspace.current_user_role}` : ''}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {selectedWorkspace && (
-            <section>
-              <h2>Members — {selectedWorkspace.name}</h2>
-              {membersLoading && <p>Loading members...</p>}
-              {membersError && <p>{membersError}</p>}
-              {!membersLoading && members.length === 0 && !membersError && (
-                <p>No members to display.</p>
-              )}
-              {!membersLoading && members.length > 0 && (
-                <ul>
-                  {members.map((member) => (
-                    <li key={member.id}>
-                      {member.name} ({member.email}) — {member.role}
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              <h2>Customers — {selectedWorkspace.name}</h2>
-              {customersLoading && <p>Loading customers...</p>}
-              {customersError && <p>{customersError}</p>}
-              {!customersLoading && customers.length === 0 && !customersError && (
-                <p>No customers yet.</p>
-              )}
-              {!customersLoading && customers.length > 0 && (
-                <ul>
-                  {customers.map((customer) => (
-                    <li key={customer.id}>
-                      <button
-                        type="button"
-                        aria-pressed={customer.id === selectedCustomerId}
-                        onClick={() => selectCustomer(customer.id)}
-                      >
-                        {customer.name} ({customer.slug})
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              {selectedCustomer && (
-                <section>
-                  <h2>Deployments — {selectedCustomer.name}</h2>
-                  {deploymentsLoading && <p>Loading deployments...</p>}
-                  {deploymentsError && <p>{deploymentsError}</p>}
-                  {!deploymentsLoading && deployments.length === 0 && !deploymentsError && (
-                    <p>No deployments yet.</p>
-                  )}
-                  {!deploymentsLoading && deployments.length > 0 && (
-                    <div>
-                      {DEPLOYMENT_STAGES.map((stage) => (
-                        <section key={stage}>
-                          <h3>{stage}</h3>
-                          {deploymentsByStage[stage]?.length ? (
-                            <ul>
-                              {deploymentsByStage[stage].map((deployment) => (
-                                <li key={deployment.id}>
-                                  <button
-                                    type="button"
-                                    aria-pressed={deployment.id === selectedDeploymentId}
-                                    onClick={() => selectDeployment(deployment.id)}
-                                  >
-                                    {deployment.name}
-                                    {deployment.description ? ` — ${deployment.description}` : ''}
-                                  </button>
-                                </li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p>No deployments in this stage.</p>
-                          )}
-                        </section>
-                      ))}
-                    </div>
-                  )}
-                  {selectedDeployment && (
-                    <section>
-                      <h2>Integrations — {selectedDeployment.name}</h2>
-                      {integrationsLoading && <p>Loading integrations...</p>}
-                      {integrationsError && <p>{integrationsError}</p>}
-                      {integrationTestMessage && <p>{integrationTestMessage}</p>}
-                      {!integrationsLoading && integrations.length === 0 && !integrationsError && (
-                        <p>No integrations yet.</p>
-                      )}
-                      {!integrationsLoading && integrations.length > 0 && (
-                        <ul>
-                          {integrations.map((integration) => (
-                            <li key={integration.id}>
-                              {integration.name} ({integration.type}) — {integration.status}
-                              <button
-                                type="button"
-                                onClick={() => handleTestIntegration(integration.id)}
-                              >
-                                Test connection
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-
-                      <section>
-                        <h3>AI Observability — {selectedDeployment.name}</h3>
-                        {(aiHealthLoading || aiTracesLoading || incidentsLoading) && (
-                          <p>Loading observability data...</p>
-                        )}
-                        {aiHealthError && <p>{aiHealthError}</p>}
-                        {aiHealth && (
-                          <div>
-                            <h4>Health metrics (7 days)</h4>
-                            <ul>
-                              <li>Requests: {aiHealth.request_count}</li>
-                              <li>
-                                Failure rate: {Math.round(aiHealth.failure_rate * 100)}% (
-                                {aiHealth.failure_count} failures)
-                              </li>
-                              <li>Average latency: {aiHealth.average_latency_ms}ms</li>
-                              <li>
-                                Tokens: {aiHealth.total_input_tokens} in /{' '}
-                                {aiHealth.total_output_tokens} out
-                              </li>
-                              <li>Estimated cost: ${aiHealth.estimated_cost_usd.toFixed(6)}</li>
-                              <li>Tool failures: {aiHealth.tool_failure_count}</li>
-                              <li>RAG requests: {aiHealth.rag_request_count}</li>
-                            </ul>
-                          </div>
-                        )}
-                        {aiTracesError && <p>{aiTracesError}</p>}
-                        {!aiTracesLoading && aiTraces.length > 0 && (
-                          <div>
-                            <h4>Recent traces</h4>
-                            <ul>
-                              {aiTraces.slice(0, 5).map((trace) => (
-                                <li key={trace.id}>
-                                  #{trace.id} — {trace.status} — {trace.latency_ms}ms —{' '}
-                                  {trace.model}
-                                  {trace.tool_names.length > 0
-                                    ? ` — tools: ${trace.tool_names.join(', ')}`
-                                    : ''}
-                                  {trace.rag_used ? ' — RAG used' : ''}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                        {!aiTracesLoading && aiTraces.length === 0 && !aiTracesError && (
-                          <p>No copilot traces yet.</p>
-                        )}
-                        {incidentsError && <p>{incidentsError}</p>}
-                        {!incidentsLoading && incidents.length > 0 && (
-                          <div>
-                            <h4>Incidents</h4>
-                            <ul>
-                              {incidents.slice(0, 5).map((incident) => (
-                                <li key={incident.id}>
-                                  #{incident.id} — {incident.severity} / {incident.status} —{' '}
-                                  {incident.title} ({incident.source})
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                        {!incidentsLoading && incidents.length === 0 && !incidentsError && (
-                          <p>No incidents recorded.</p>
-                        )}
-                      </section>
-
-                      <section>
-                        <h3>AI Copilot — {selectedDeployment.name}</h3>
-                        <form onSubmit={handleAskCopilot}>
-                          <label>
-                            Ask about this deployment
-                            <textarea
-                              value={copilotQuestion}
-                              onChange={(event) => setCopilotQuestion(event.target.value)}
-                              rows={3}
-                              required
-                            />
-                          </label>
-                          <button type="submit" disabled={copilotLoading}>
-                            {copilotLoading ? 'Thinking...' : 'Ask copilot'}
-                          </button>
-                        </form>
-                        {copilotError && <p>{copilotError}</p>}
-                        {copilotAnswer && (
-                          <div>
-                            <h4>Answer</h4>
-                            <p>{copilotAnswer}</p>
-                          </div>
-                        )}
-                        {copilotToolsUsed.length > 0 && (
-                          <div>
-                            <h4>Tools used</h4>
-                            <ul>
-                              {copilotToolsUsed.map((tool) => (
-                                <li key={tool}>{tool}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </section>
-
-                      <section>
-                        <h3>AI Evaluations — {selectedDeployment.name}</h3>
-                        {evaluationRunsLoading && <p>Loading evaluation results...</p>}
-                        {evaluationRunsError && <p>{evaluationRunsError}</p>}
-                        {evaluationDatasetId !== null && (
-                          <p>
-                            <button type="button" onClick={handleRunEvaluation}>
-                              Run evaluation dataset
-                            </button>
-                          </p>
-                        )}
-                        {evaluationRunMessage && <p>{evaluationRunMessage}</p>}
-                        {!evaluationRunsLoading && evaluationRuns.length === 0 && !evaluationRunsError && (
-                          <p>No evaluation runs yet.</p>
-                        )}
-                        {!evaluationRunsLoading && evaluationRuns.length > 0 && (
-                          <ul>
-                            {evaluationRuns.map((run) => (
-                              <li key={run.id}>
-                                Run #{run.id} — {run.status} — pass rate{' '}
-                                {Math.round((run.metrics.pass_rate ?? 0) * 100)}% — avg latency{' '}
-                                {run.metrics.average_latency_ms}ms
-                                {run.results && run.results.length > 0 && (
-                                  <ul>
-                                    {run.results.map((result) => (
-                                      <li key={result.id}>
-                                        Case #{result.evaluation_case_id}:{' '}
-                                        {result.passed ? 'passed' : 'failed'} ({result.latency_ms}ms)
-                                      </li>
-                                    ))}
-                                  </ul>
-                                )}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </section>
-
-                      <section>
-                        <h3>Pending AI Actions — {selectedDeployment.name}</h3>
-                        {pendingAiActionsLoading && <p>Loading pending actions...</p>}
-                        {pendingAiActionsError && <p>{pendingAiActionsError}</p>}
-                        {aiActionMessage && <p>{aiActionMessage}</p>}
-                        {!pendingAiActionsLoading &&
-                          pendingAiActions.length === 0 &&
-                          !pendingAiActionsError && <p>No pending actions.</p>}
-                        {!pendingAiActionsLoading && pendingAiActions.length > 0 && (
-                          <ul>
-                            {pendingAiActions.map((action) => (
-                              <li key={action.id}>
-                                {action.action_type} — {JSON.stringify(action.payload)} — requested by user{' '}
-                                {action.requested_by}
-                                <button type="button" onClick={() => handleApproveAiAction(action.id)}>
-                                  Approve
-                                </button>
-                                <button type="button" onClick={() => handleRejectAiAction(action.id)}>
-                                  Reject
-                                </button>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </section>
-                    </section>
-                  )}
-                </section>
-              )}
-            </section>
-          )}
-        </section>
-      )}
-    </main>
+      {customersError && <p role="alert">{customersError}</p>}
+      {deploymentsError && <p role="alert">{deploymentsError}</p>}
+      {renderView()}
+    </AppLayout>
   )
 }
 

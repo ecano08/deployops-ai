@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use App\Enums\IntegrationStatus;
 use App\Enums\IntegrationType;
+use App\Support\ResourceSanitizer;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -28,7 +29,7 @@ class DeploymentIntegrationResource extends JsonResource
             'base_url' => $this->base_url,
             'endpoint' => $this->endpoint,
             'status' => $status instanceof IntegrationStatus ? $status->value : (string) $status,
-            'config' => $this->config,
+            'config' => ResourceSanitizer::integrationConfig($this->config),
             'has_api_key' => $this->apiKey() !== null,
             'has_webhook_secret' => $this->webhookSecret() !== null,
             'created_at' => $this->created_at,
