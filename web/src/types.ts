@@ -40,6 +40,46 @@ export type WorkspaceMemberListResponse = {
   data: WorkspaceMember[]
 }
 
+export type WorkspaceMemberResponse = {
+  data: WorkspaceMember
+}
+
+export type WorkspaceInvitation = {
+  id: number
+  email: string
+  role: Exclude<WorkspaceRole, 'owner'>
+  status: 'pending' | 'accepted'
+  expires_at: string
+  invitation_url?: string
+  workspace?: {
+    name: string
+  }
+}
+
+export type WorkspaceInvitationListResponse = {
+  data: WorkspaceInvitation[]
+}
+
+export type WorkspaceInvitationResponse = {
+  data: WorkspaceInvitation
+}
+
+export type InviteWorkspaceMemberResult =
+  | { type: 'member'; member: WorkspaceMember }
+  | { type: 'invitation'; invitation: WorkspaceInvitation }
+
+export function isWorkspaceInvitation(
+  data: WorkspaceMember | WorkspaceInvitation,
+): data is WorkspaceInvitation {
+  return 'status' in data && 'expires_at' in data
+}
+
+export const ASSIGNABLE_WORKSPACE_ROLES: Exclude<WorkspaceRole, 'owner'>[] = [
+  'admin',
+  'engineer',
+  'viewer',
+]
+
 export type DeploymentStage =
   | 'discovery'
   | 'integration'
@@ -84,6 +124,10 @@ export type DeploymentListResponse = {
   data: Deployment[]
 }
 
+export type DeploymentResponse = {
+  data: Deployment
+}
+
 export type IntegrationType = 'rest_api' | 'webhook'
 
 export type IntegrationStatus = 'disconnected' | 'connected' | 'error'
@@ -104,6 +148,27 @@ export type DeploymentIntegration = {
 
 export type IntegrationListResponse = {
   data: DeploymentIntegration[]
+}
+
+export type IntegrationResponse = {
+  data: DeploymentIntegration
+}
+
+export type CreateIntegrationPayload = {
+  type: IntegrationType
+  name: string
+  base_url?: string | null
+  endpoint?: string | null
+  api_key?: string
+  webhook_secret?: string
+}
+
+export type UpdateIntegrationPayload = {
+  name?: string
+  base_url?: string | null
+  endpoint?: string | null
+  api_key?: string | null
+  webhook_secret?: string | null
 }
 
 export type IntegrationTestResponse = {
@@ -171,12 +236,22 @@ export type EvaluationRun = {
 
 export type AiActionStatus = 'pending' | 'approved' | 'rejected' | 'executed' | 'failed'
 
+export type AiActionRequester = {
+  id: number
+  name: string | null
+  email?: string | null
+}
+
+export function aiActionRequesterLabel(requester: AiActionRequester): string {
+  return requester.name ?? 'unknown user'
+}
+
 export type AiProposedAction = {
   id: number
   action_type: string
   payload: Record<string, unknown>
   status: AiActionStatus
-  requested_by: number
+  requested_by: AiActionRequester
   approved_by: number | null
   executed_at: string | null
   error_message: string | null
@@ -184,6 +259,14 @@ export type AiProposedAction = {
 
 export type EvaluationDatasetListResponse = {
   data: EvaluationDataset[]
+}
+
+export type EvaluationDatasetResponse = {
+  data: EvaluationDataset
+}
+
+export type EvaluationCaseResponse = {
+  data: EvaluationCase
 }
 
 export type EvaluationRunListResponse = {

@@ -160,7 +160,7 @@ class CopilotToolExecutor
                         'description' => 'Maximum number of chunks to return.',
                     ],
                 ],
-                'required' => ['query'],
+                'required' => ['query', 'top_k'],
                 'additionalProperties' => false,
             ],
         ];
@@ -180,7 +180,11 @@ class CopilotToolExecutor
             return ['error' => 'Invalid search query.'];
         }
 
-        if (array_key_exists('top_k', $arguments) && ! is_int($arguments['top_k'])) {
+        if (! array_key_exists('top_k', $arguments)) {
+            return ['error' => 'Missing required tool argument.'];
+        }
+
+        if (! is_int($arguments['top_k'])) {
             if (is_string($arguments['top_k']) && ctype_digit($arguments['top_k'])) {
                 return null;
             }
@@ -341,7 +345,7 @@ class CopilotToolExecutor
         Gate::forUser($context->user)->authorize('view', $context->deployment);
 
         $query = trim((string) $arguments['query']);
-        $topK = array_key_exists('top_k', $arguments) ? (int) $arguments['top_k'] : null;
+        $topK = (int) $arguments['top_k'];
 
         try {
             $results = $this->knowledgeSearch->search($context, $query, $topK);

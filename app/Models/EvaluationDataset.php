@@ -48,6 +48,14 @@ class EvaluationDataset extends Model
     }
 
     /**
+     * @return HasMany<EvaluationCase, $this>
+     */
+    public function evaluationCases(): HasMany
+    {
+        return $this->cases();
+    }
+
+    /**
      * @return HasMany<EvaluationRun, $this>
      */
     public function runs(): HasMany

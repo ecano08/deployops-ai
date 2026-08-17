@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\WorkspaceRole;
 use App\Http\Requests\StoreWorkspaceMemberRequest;
 use App\Http\Requests\UpdateWorkspaceMemberRequest;
 use App\Http\Resources\WorkspaceMemberResource;
@@ -29,11 +30,10 @@ class WorkspaceMemberController extends Controller
     {
         $user = User::query()->where('email', $request->validated('email'))->firstOrFail();
 
-        $workspace->members()->attach($user->id, [
-            'role' => $request->validated('role'),
-        ]);
-
-        $member = $workspace->members()->whereKey($user->id)->firstOrFail();
+        $member = $workspace->addMemberWithRole(
+            $user,
+            WorkspaceRole::from((string) $request->validated('role')),
+        );
 
         return WorkspaceMemberResource::make($member)
             ->response()

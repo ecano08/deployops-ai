@@ -302,6 +302,7 @@ it('uses search_knowledge in copilot responses with source attribution', functio
         'api.openai.com/v1/responses' => Http::sequence()
             ->push(openAiToolCallResponse('search_knowledge', json_encode([
                 'query' => 'rollback steps',
+                'top_k' => 5,
             ])))
             ->push(openAiMessageResponse('According to runbook.txt, rollback steps are to stop traffic.')),
         'http://ai-service.test/search' => Http::response([
@@ -356,6 +357,7 @@ it('omits the internal ai service token when it is not configured', function () 
 
     $result = app(CopilotToolExecutor::class)->validateAndExecute($context, 'search_knowledge', [
         'query' => 'rollback steps',
+        'top_k' => 5,
     ]);
 
     expect($result)->toHaveKey('error');

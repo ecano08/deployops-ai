@@ -6,6 +6,7 @@ use App\Enums\AiActionStatus;
 use App\Models\AiProposedAction;
 use App\Models\Deployment;
 use App\Models\User;
+use Illuminate\Auth\Access\Response;
 
 class AiProposedActionPolicy
 {
@@ -24,12 +25,17 @@ class AiProposedActionPolicy
         return $user->can('manageDeployments', $deployment->workspace);
     }
 
-    public function approve(User $user, AiProposedAction $aiProposedAction): bool
+    public function approve(User $user, AiProposedAction $aiProposedAction): bool|Response
     {
         if ($aiProposedAction->requested_by === $user->id) {
-            return false;
+            return Response::deny('You cannot approve an action you requested yourself.');
         }
 
+        return $user->can('approveAiActions', $aiProposedAction->workspace);
+    }
+
+    public function reject(User $user, AiProposedAction $aiProposedAction): bool
+    {
         return $user->can('approveAiActions', $aiProposedAction->workspace);
     }
 

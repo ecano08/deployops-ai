@@ -171,3 +171,80 @@ it('allows viewers to read evaluation runs', function () {
         ->assertOk()
         ->assertJsonCount(1, 'data');
 });
+
+it('allows engineers to update and delete evaluation datasets', function () {
+    $fixture = createWorkspaceWithRoles();
+    $customer = Customer::factory()->forWorkspace($fixture['workspace'])->create();
+    $deployment = Deployment::factory()->forCustomer($customer)->create();
+    $dataset = EvaluationDataset::factory()->forDeployment($deployment)->create([
+        'name' => 'Original name',
+    ]);
+
+    Sanctum::actingAs($fixture['engineer']);
+
+    $this->patchJson(
+        evaluationDatasetsPath($fixture['workspace'], $customer, $deployment).'/'.$dataset->id,
+        [
+            'name' => 'Updated name',
+            'description' => 'Updated description',
+        ],
+    )
+        ->assertOk()
+        ->assertJsonPath('data.name', 'Updated name')
+        ->assertJsonPath('data.description', 'Updated description');
+
+    $this->deleteJson(
+        evaluationDatasetsPath($fixture['workspace'], $customer, $deployment).'/'.$dataset->id,
+    )->assertNoContent();
+
+    expect(EvaluationDataset::query()->find($dataset->id))->toBeNull();
+});
+
+it('allows engineers to update and delete evaluation cases', function () {
+    $fixture = createWorkspaceWithRoles();
+    $customer = Customer::factory()->forWorkspace($fixture['workspace'])->create();
+    $deployment = Deployment::factory()->forCustomer($customer)->create();
+    $dataset = EvaluationDataset::factory()->forDeployment($deployment)->create();
+    $case = EvaluationCase::factory()->forDataset($dataset)->create([
+        'input' => 'Original input',
+        'expected_behavior' => 'Original behavior',
+    ]);
+
+    Sanctum::actingAs($fixture['engineer']);
+
+    $this->patchJson(
+        evaluationDatasetsPath($fixture['workspace'], $customer, $deployment).'/'.$dataset->id.'/cases/'.$case->id,
+        [
+            'input' => 'Updated input',
+            'expected_behavior' => 'Updated behavior',
+            'expected_tools' => ['list_deployment_integrations'],
+        ],
+    )
+        ->assertOk()
+        ->assertJsonPath('data.input', 'Updated input')
+        ->assertJsonPath('data.expected_behavior', 'Updated behavior')
+        ->assertJsonPath('data.expected_tools.0', 'list_deployment_integrations');
+
+    $this->deleteJson(
+        evaluationDatasetsPath($fixture['workspace'], $customer, $deployment).'/'.$dataset->id.'/cases/'.$case->id,
+    )->assertNoContent();
+
+    expect(EvaluationCase::query()->find($case->id))->toBeNull();
+});
+
+it('forbids viewers from updating evaluation cases', function () {
+    $fixture = createWorkspaceWithRoles();
+    $customer = Customer::factory()->forWorkspace($fixture['workspace'])->create();
+    $deployment = Deployment::factory()->forCustomer($customer)->create();
+    $dataset = EvaluationDataset::factory()->forDeployment($deployment)->create();
+    $case = EvaluationCase::factory()->forDataset($dataset)->create();
+
+    Sanctum::actingAs($fixture['viewer']);
+
+    $this->patchJson(
+        evaluationDatasetsPath($fixture['workspace'], $customer, $deployment).'/'.$dataset->id.'/cases/'.$case->id,
+        [
+            'input' => 'Viewer update',
+        ],
+    )->assertForbidden();
+});

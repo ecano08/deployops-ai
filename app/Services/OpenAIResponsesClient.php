@@ -10,6 +10,10 @@ class OpenAIResponsesClient
 {
     private const string API_URL = 'https://api.openai.com/v1/responses';
 
+    public function __construct(
+        private OpenAiErrorClassifier $errorClassifier,
+    ) {}
+
     /**
      * @param  string|array<int, mixed>  $input
      * @param  array<int, array<string, mixed>>  $tools
@@ -19,7 +23,6 @@ class OpenAIResponsesClient
         string $instructions,
         string|array $input,
         array $tools,
-        ?string $previousResponseId = null,
     ): array {
         $apiKey = config('services.openai.api_key');
 
@@ -36,10 +39,6 @@ class OpenAIResponsesClient
             'store' => false,
         ];
 
-        if ($previousResponseId !== null) {
-            $payload['previous_response_id'] = $previousResponseId;
-        }
-
         try {
             $response = Http::timeout((int) config('services.openai.timeout'))
                 ->connectTimeout((int) config('services.openai.connect_timeout'))
@@ -51,13 +50,11 @@ class OpenAIResponsesClient
         }
 
         if ($response->failed()) {
-            $message = $response->json('error.message');
+            $classified = $this->errorClassifier->classify($response);
 
             throw new CopilotException(
-                is_string($message) && $message !== ''
-                    ? 'The AI service returned an error.'
-                    : 'The AI service returned an error.',
-                $response->status() >= 500 ? 503 : 502,
+                $classified['message'],
+                $classified['status_code'],
             );
         }
 
@@ -147,12 +144,44 @@ class OpenAIResponsesClient
     }
 
     /**
-     * @param  array<string, mixed>  $response
+     * @return array{type: string, role: string, content: array<int, array{type: string, text: string}>}
      */
-    public function responseId(array $response): ?string
+    public function userMessageItem(string $text): array
     {
-        $id = $response['id'] ?? null;
+        return [
+            'type' => 'message',
+            'role' => 'user',
+            'content' => [
+                [
+                    'type' => 'input_text',
+                    'text' => $text,
+                ],
+            ],
+        ];
+    }
 
-        return is_string($id) ? $id : null;
+    /**
+     * @param  array<string, mixed>  $response
+     * @return array<int, array<string, mixed>>
+     */
+    public function extractFunctionCallItems(array $response): array
+    {
+        $output = $response['output'] ?? null;
+
+        if (! is_array($output)) {
+            return [];
+        }
+
+        $items = [];
+
+        foreach ($output as $item) {
+            if (! is_array($item) || ($item['type'] ?? null) !== 'function_call') {
+                continue;
+            }
+
+            $items[] = $item;
+        }
+
+        return $items;
     }
 }

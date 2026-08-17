@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\WorkspaceInvitationStatus;
 use App\Enums\WorkspaceRole;
 use Database\Factories\WorkspaceFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -38,11 +39,36 @@ class Workspace extends Model
     }
 
     /**
+     * @return HasMany<WorkspaceInvitation, $this>
+     */
+    public function invitations(): HasMany
+    {
+        return $this->hasMany(WorkspaceInvitation::class);
+    }
+
+    /**
      * @return HasMany<Customer, $this>
      */
     public function customers(): HasMany
     {
         return $this->hasMany(Customer::class);
+    }
+
+    public function addMemberWithRole(User $user, WorkspaceRole $role): User
+    {
+        $this->members()->attach($user->id, [
+            'role' => $role->value,
+        ]);
+
+        $this->invitations()
+            ->where('email', $user->email)
+            ->where('status', WorkspaceInvitationStatus::Pending)
+            ->update([
+                'status' => WorkspaceInvitationStatus::Accepted,
+                'accepted_at' => now(),
+            ]);
+
+        return $this->members()->whereKey($user->id)->firstOrFail();
     }
 
     /**
@@ -56,6 +82,19 @@ class Workspace extends Model
     public function roleFor(User $user): ?WorkspaceRole
     {
         return $user->roleIn($this);
+    }
+
+    public function includesUser(User $user): bool
+    {
+        if ($this->owner_id === $user->id) {
+            return true;
+        }
+
+        if ($this->relationLoaded('members')) {
+            return $this->members->contains('id', $user->id);
+        }
+
+        return $this->members()->whereKey($user->id)->exists();
     }
 
     public static function uniqueSlugFor(string $name): string

@@ -1,10 +1,21 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import {
   approveAiAction,
   askCopilot,
   clearToken,
+  createCustomer,
+  createDeployment,
+  createEvaluationCase,
+  createEvaluationDataset,
+  createIntegration,
   createWorkspace,
+  deleteCustomer,
+  deleteDeployment,
+  deleteEvaluationCase,
+  deleteEvaluationDataset,
+  deleteIntegration,
   deleteKnowledgeDocument,
+  deleteWorkspaceMember,
   fetchAiHealth,
   fetchAiTraces,
   fetchCurrentUser,
@@ -16,18 +27,31 @@ import {
   fetchIntegrations,
   fetchKnowledgeDocuments,
   fetchPendingAiActions,
+  fetchWorkspaceInvitations,
   fetchWorkspaceMembers,
   fetchWorkspaces,
   getToken,
+  inviteWorkspaceMember,
   logout,
   rejectAiAction,
   runEvaluationDataset,
   testIntegration,
+  updateCustomer,
+  updateDeployment,
+  updateDeploymentStage,
+  updateEvaluationCase,
+  updateEvaluationDataset,
+  updateIntegration,
+  updateWorkspaceMember,
   uploadKnowledgeDocument,
 } from './api'
 import { AppLayout } from './components/layout/AppLayout'
 import type { AppView } from './components/layout/Sidebar'
+import { EmptyState } from './components/ui/EmptyState'
 import { LoadingState } from './components/ui/LoadingState'
+import { canManageCustomers, canManageDeployments } from './lib/permissions'
+import { apiErrorReference } from './lib/apiError'
+import { AcceptInvitationPage } from './pages/AcceptInvitationPage'
 import { ApprovalsPage } from './pages/ApprovalsPage'
 import { AuthPage } from './pages/AuthPage'
 import { CopilotPage } from './pages/CopilotPage'
@@ -36,19 +60,26 @@ import { EvalsPage } from './pages/EvalsPage'
 import { IntegrationsPage } from './pages/IntegrationsPage'
 import { KnowledgePage } from './pages/KnowledgePage'
 import { ObservabilityPage } from './pages/ObservabilityPage'
-import type {
-  AiHealthSummary,
-  AiProposedAction,
-  AiTrace,
-  Customer,
-  Deployment,
-  DeploymentIntegration,
-  EvaluationRun,
-  Incident,
-  KnowledgeDocument,
-  User,
-  Workspace,
-  WorkspaceMember,
+import { TeamPage } from './pages/TeamPage'
+import {
+  isWorkspaceInvitation,
+  type AiHealthSummary,
+  type AiProposedAction,
+  type AiTrace,
+  type Customer,
+  type Deployment,
+  type DeploymentIntegration,
+  type DeploymentStage,
+  type EvaluationDataset,
+  type EvaluationRun,
+  type Incident,
+  type InviteWorkspaceMemberResult,
+  type KnowledgeDocument,
+  type User,
+  type Workspace,
+  type WorkspaceInvitation,
+  type WorkspaceMember,
+  type WorkspaceRole,
 } from './types'
 
 type HealthResponse = {
@@ -58,6 +89,12 @@ type HealthResponse = {
     status: string
     service: string
   }
+}
+
+function invitationTokenFromPath(): string | null {
+  const match = window.location.pathname.match(/^\/invitations\/([^/]+)$/)
+
+  return match ? decodeURIComponent(match[1]) : null
 }
 
 function App() {
@@ -71,6 +108,10 @@ function App() {
   const [members, setMembers] = useState<WorkspaceMember[]>([])
   const [membersError, setMembersError] = useState<string | null>(null)
   const [membersLoading, setMembersLoading] = useState(false)
+  const [invitations, setInvitations] = useState<WorkspaceInvitation[]>([])
+  const [invitationsError, setInvitationsError] = useState<string | null>(null)
+  const [teamMessage, setTeamMessage] = useState<string | null>(null)
+  const [invitationToken, setInvitationToken] = useState(() => invitationTokenFromPath())
   const [customers, setCustomers] = useState<Customer[]>([])
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null)
   const [customersError, setCustomersError] = useState<string | null>(null)
@@ -91,7 +132,12 @@ function App() {
   const [copilotAnswer, setCopilotAnswer] = useState<string | null>(null)
   const [copilotToolsUsed, setCopilotToolsUsed] = useState<string[]>([])
   const [copilotError, setCopilotError] = useState<string | null>(null)
+  const [copilotErrorReference, setCopilotErrorReference] = useState<string | null>(null)
   const [copilotLoading, setCopilotLoading] = useState(false)
+  const knowledgePollInFlight = useRef(false)
+  const [evaluationDatasets, setEvaluationDatasets] = useState<EvaluationDataset[]>([])
+  const [evaluationDatasetsError, setEvaluationDatasetsError] = useState<string | null>(null)
+  const [evaluationDatasetsLoading, setEvaluationDatasetsLoading] = useState(false)
   const [evaluationRuns, setEvaluationRuns] = useState<EvaluationRun[]>([])
   const [evaluationRunsError, setEvaluationRunsError] = useState<string | null>(null)
   const [evaluationRunsLoading, setEvaluationRunsLoading] = useState(false)
@@ -116,6 +162,173 @@ function App() {
   const selectedCustomer = customers.find((customer) => customer.id === selectedCustomerId) ?? null
   const selectedDeployment = deployments.find((deployment) => deployment.id === selectedDeploymentId) ?? null
 
+  const refreshEvaluationData = useCallback(async () => {
+    if (
+      selectedWorkspaceId === null ||
+      selectedCustomerId === null ||
+      selectedDeploymentId === null
+    ) {
+      return
+    }
+
+    setEvaluationDatasetsLoading(true)
+    setEvaluationRunsLoading(true)
+
+    try {
+      const [runsResponse, datasetsResponse] = await Promise.all([
+        fetchEvaluationRuns(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId),
+        fetchEvaluationDatasets(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId),
+      ])
+
+      setEvaluationRuns(runsResponse.data)
+      setEvaluationRunsError(null)
+      setEvaluationDatasets(datasetsResponse.data)
+      setEvaluationDatasetsError(null)
+      setEvaluationDatasetId((current) => {
+        if (current !== null && datasetsResponse.data.some((dataset) => dataset.id === current)) {
+          return current
+        }
+
+        return datasetsResponse.data[0]?.id ?? null
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load evaluation data.'
+      setEvaluationRuns([])
+      setEvaluationRunsError(message)
+      setEvaluationDatasets([])
+      setEvaluationDatasetsError(message)
+      setEvaluationDatasetId(null)
+    } finally {
+      setEvaluationDatasetsLoading(false)
+      setEvaluationRunsLoading(false)
+    }
+  }, [selectedWorkspaceId, selectedCustomerId, selectedDeploymentId])
+
+  const refreshObservabilityData = useCallback(async () => {
+    if (
+      selectedWorkspaceId === null ||
+      selectedCustomerId === null ||
+      selectedDeploymentId === null
+    ) {
+      return
+    }
+
+    try {
+      const [healthResponse, tracesResponse, incidentsResponse] = await Promise.all([
+        fetchAiHealth(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId),
+        fetchAiTraces(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId),
+        fetchIncidents(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId),
+      ])
+      setAiHealth(healthResponse.data)
+      setAiHealthError(null)
+      setAiTraces(tracesResponse.data)
+      setAiTracesError(null)
+      setIncidents(incidentsResponse.data)
+      setIncidentsError(null)
+    } catch (error) {
+      setAiHealth(null)
+      setAiHealthError(error instanceof Error ? error.message : 'Failed to load observability data.')
+      setAiTraces([])
+      setAiTracesError(error instanceof Error ? error.message : 'Failed to load observability data.')
+      setIncidents([])
+      setIncidentsError(error instanceof Error ? error.message : 'Failed to load observability data.')
+    }
+  }, [selectedWorkspaceId, selectedCustomerId, selectedDeploymentId])
+
+  const refreshDeployments = useCallback(async () => {
+    if (selectedWorkspaceId === null || selectedCustomerId === null) {
+      return
+    }
+
+    try {
+      const response = await fetchDeployments(selectedWorkspaceId, selectedCustomerId)
+      setDeployments(response.data)
+      setDeploymentsError(null)
+    } catch (error) {
+      setDeploymentsError(error instanceof Error ? error.message : 'Failed to load deployments.')
+    }
+  }, [selectedWorkspaceId, selectedCustomerId])
+
+  const refreshPendingAiActions = useCallback(async () => {
+    if (
+      selectedWorkspaceId === null ||
+      selectedCustomerId === null ||
+      selectedDeploymentId === null
+    ) {
+      return
+    }
+
+    setPendingAiActionsLoading(true)
+
+    try {
+      const response = await fetchPendingAiActions(
+        selectedWorkspaceId,
+        selectedCustomerId,
+        selectedDeploymentId,
+      )
+      setPendingAiActions(response.data)
+      setPendingAiActionsError(null)
+    } catch (error) {
+      setPendingAiActions([])
+      setPendingAiActionsError(
+        error instanceof Error ? error.message : 'Failed to load pending actions.',
+      )
+    } finally {
+      setPendingAiActionsLoading(false)
+    }
+  }, [selectedWorkspaceId, selectedCustomerId, selectedDeploymentId])
+
+  const refreshTeamData = useCallback(async (isCancelled: () => boolean = () => false) => {
+    if (selectedWorkspaceId === null) {
+      return
+    }
+
+    const workspaceId = selectedWorkspaceId
+
+    await Promise.all([
+      fetchWorkspaceMembers(workspaceId)
+        .then((response) => {
+          if (isCancelled()) {
+            return
+          }
+
+          setMembers(response.data)
+          setMembersError(null)
+        })
+        .catch((error: unknown) => {
+          if (isCancelled()) {
+            return
+          }
+
+          setMembers([])
+          setMembersError(error instanceof Error ? error.message : 'Failed to load members.')
+        }),
+      fetchWorkspaceInvitations(workspaceId)
+        .then((response) => {
+          if (isCancelled()) {
+            return
+          }
+
+          setInvitations(response.data)
+          setInvitationsError(null)
+        })
+        .catch((error: unknown) => {
+          if (isCancelled()) {
+            return
+          }
+
+          setInvitations([])
+          setInvitationsError(
+            error instanceof Error ? error.message : 'Failed to load invitations.',
+          )
+        }),
+    ])
+
+    if (!isCancelled()) {
+      setMembersLoading(false)
+    }
+  }, [selectedWorkspaceId])
+
   const handleAuthenticated = () => {
     setLoadingUser(true)
 
@@ -136,7 +349,7 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (!getToken()) {
+    if (invitationTokenFromPath() || !getToken()) {
       return
     }
 
@@ -187,29 +400,51 @@ function App() {
 
     let cancelled = false
 
-    fetchWorkspaceMembers(selectedWorkspaceId)
-      .then((response) => {
-        if (!cancelled) {
-          setMembers(response.data)
-          setMembersError(null)
-        }
-      })
-      .catch((error: Error) => {
-        if (!cancelled) {
-          setMembers([])
-          setMembersError(error.message)
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setMembersLoading(false)
-        }
-      })
+    void Promise.resolve().then(() => refreshTeamData(() => cancelled))
 
     return () => {
       cancelled = true
     }
-  }, [user, selectedWorkspaceId])
+  }, [user, selectedWorkspaceId, refreshTeamData])
+
+  useEffect(() => {
+    if (activeView !== 'team' || !user || selectedWorkspaceId === null) {
+      return
+    }
+
+    let cancelled = false
+
+    void Promise.resolve().then(() => refreshTeamData(() => cancelled))
+
+    const intervalId = window.setInterval(() => {
+      void refreshTeamData(() => cancelled)
+    }, 4000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+    }
+  }, [activeView, user, selectedWorkspaceId, refreshTeamData])
+
+  useEffect(() => {
+    if (!user || selectedWorkspaceId === null) {
+      return
+    }
+
+    const handleVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshTeamData()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisible)
+    window.addEventListener('focus', handleVisible)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisible)
+      window.removeEventListener('focus', handleVisible)
+    }
+  }, [user, selectedWorkspaceId, refreshTeamData])
 
   useEffect(() => {
     if (!user || selectedWorkspaceId === null) {
@@ -342,6 +577,55 @@ function App() {
   }, [user, selectedWorkspaceId, selectedCustomerId, selectedDeploymentId])
 
   useEffect(() => {
+    if (
+      !user ||
+      selectedWorkspaceId === null ||
+      selectedCustomerId === null ||
+      selectedDeploymentId === null
+    ) {
+      return
+    }
+
+    const hasProcessingDocuments = knowledgeDocuments.some((document) => {
+      const status = document.status.toLowerCase()
+      return status === 'pending' || status === 'processing'
+    })
+
+    if (!hasProcessingDocuments) {
+      return
+    }
+
+    const intervalId = window.setInterval(() => {
+      if (knowledgePollInFlight.current) {
+        return
+      }
+
+      knowledgePollInFlight.current = true
+
+      fetchKnowledgeDocuments(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId)
+        .then((response) => {
+          setKnowledgeDocuments(response.data)
+        })
+        .catch(() => {
+          // Keep the current list visible if a poll request fails transiently.
+        })
+        .finally(() => {
+          knowledgePollInFlight.current = false
+        })
+    }, 2500)
+
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [
+    user,
+    selectedWorkspaceId,
+    selectedCustomerId,
+    selectedDeploymentId,
+    knowledgeDocuments,
+  ])
+
+  useEffect(() => {
     if (!user || selectedWorkspaceId === null || selectedCustomerId === null || selectedDeploymentId === null) {
       return
     }
@@ -351,28 +635,113 @@ function App() {
     Promise.all([
       fetchEvaluationRuns(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId),
       fetchEvaluationDatasets(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId),
-      fetchPendingAiActions(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId),
     ])
-      .then(([runsResponse, datasetsResponse, actionsResponse]) => {
+      .then(([runsResponse, datasetsResponse]) => {
         if (!cancelled) {
           setEvaluationRuns(runsResponse.data)
           setEvaluationRunsError(null)
-          setEvaluationDatasetId(datasetsResponse.data[0]?.id ?? null)
+          setEvaluationDatasets(datasetsResponse.data)
+          setEvaluationDatasetsError(null)
+          setEvaluationDatasetId((current) => {
+            if (current !== null && datasetsResponse.data.some((dataset) => dataset.id === current)) {
+              return current
+            }
+
+            return datasetsResponse.data[0]?.id ?? null
+          })
+        }
+      })
+      .catch((error: Error) => {
+        if (!cancelled) {
+          const message = error.message
+          setEvaluationRuns([])
+          setEvaluationRunsError(message)
+          setEvaluationDatasets([])
+          setEvaluationDatasetsError(message)
+          setEvaluationDatasetId(null)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setEvaluationDatasetsLoading(false)
+          setEvaluationRunsLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [user, selectedWorkspaceId, selectedCustomerId, selectedDeploymentId])
+
+  useEffect(() => {
+    if (
+      activeView !== 'evals' ||
+      !user ||
+      selectedWorkspaceId === null ||
+      selectedCustomerId === null ||
+      selectedDeploymentId === null
+    ) {
+      return
+    }
+
+    let cancelled = false
+
+    Promise.all([
+      fetchEvaluationRuns(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId),
+      fetchEvaluationDatasets(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId),
+    ])
+      .then(([runsResponse, datasetsResponse]) => {
+        if (!cancelled) {
+          setEvaluationRuns(runsResponse.data)
+          setEvaluationRunsError(null)
+          setEvaluationDatasets(datasetsResponse.data)
+          setEvaluationDatasetsError(null)
+          setEvaluationDatasetId((current) => {
+            if (current !== null && datasetsResponse.data.some((dataset) => dataset.id === current)) {
+              return current
+            }
+
+            return datasetsResponse.data[0]?.id ?? null
+          })
+        }
+      })
+      .catch((error: Error) => {
+        if (!cancelled) {
+          const message = error.message
+          setEvaluationRuns([])
+          setEvaluationRunsError(message)
+          setEvaluationDatasets([])
+          setEvaluationDatasetsError(message)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeView, user, selectedWorkspaceId, selectedCustomerId, selectedDeploymentId])
+
+  useEffect(() => {
+    if (!user || selectedWorkspaceId === null || selectedCustomerId === null || selectedDeploymentId === null) {
+      return
+    }
+
+    let cancelled = false
+
+    fetchPendingAiActions(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId)
+      .then((actionsResponse) => {
+        if (!cancelled) {
           setPendingAiActions(actionsResponse.data)
           setPendingAiActionsError(null)
         }
       })
       .catch((error: Error) => {
         if (!cancelled) {
-          setEvaluationRuns([])
-          setEvaluationRunsError(error.message)
           setPendingAiActions([])
           setPendingAiActionsError(error.message)
         }
       })
       .finally(() => {
         if (!cancelled) {
-          setEvaluationRunsLoading(false)
           setPendingAiActionsLoading(false)
         }
       })
@@ -381,6 +750,43 @@ function App() {
       cancelled = true
     }
   }, [user, selectedWorkspaceId, selectedCustomerId, selectedDeploymentId])
+
+  useEffect(() => {
+    if (
+      activeView !== 'approvals' ||
+      !user ||
+      selectedWorkspaceId === null ||
+      selectedCustomerId === null ||
+      selectedDeploymentId === null
+    ) {
+      return
+    }
+
+    let cancelled = false
+
+    fetchPendingAiActions(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId)
+      .then((actionsResponse) => {
+        if (!cancelled) {
+          setPendingAiActions(actionsResponse.data)
+          setPendingAiActionsError(null)
+        }
+      })
+      .catch((error: Error) => {
+        if (!cancelled) {
+          setPendingAiActions([])
+          setPendingAiActionsError(error.message)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setPendingAiActionsLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeView, user, selectedWorkspaceId, selectedCustomerId, selectedDeploymentId])
 
   useEffect(() => {
     if (!user || selectedWorkspaceId === null || selectedCustomerId === null || selectedDeploymentId === null) {
@@ -427,6 +833,50 @@ function App() {
     }
   }, [user, selectedWorkspaceId, selectedCustomerId, selectedDeploymentId])
 
+  useEffect(() => {
+    if (
+      activeView !== 'observability' ||
+      !user ||
+      selectedWorkspaceId === null ||
+      selectedCustomerId === null ||
+      selectedDeploymentId === null
+    ) {
+      return
+    }
+
+    let cancelled = false
+
+    Promise.all([
+      fetchAiHealth(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId),
+      fetchAiTraces(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId),
+      fetchIncidents(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId),
+    ])
+      .then(([healthResponse, tracesResponse, incidentsResponse]) => {
+        if (!cancelled) {
+          setAiHealth(healthResponse.data)
+          setAiHealthError(null)
+          setAiTraces(tracesResponse.data)
+          setAiTracesError(null)
+          setIncidents(incidentsResponse.data)
+          setIncidentsError(null)
+        }
+      })
+      .catch((error: Error) => {
+        if (!cancelled) {
+          setAiHealth(null)
+          setAiHealthError(error.message)
+          setAiTraces([])
+          setAiTracesError(error.message)
+          setIncidents([])
+          setIncidentsError(error.message)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeView, user, selectedWorkspaceId, selectedCustomerId, selectedDeploymentId])
+
   function resetDeploymentState() {
     setIntegrations([])
     setIntegrationsError(null)
@@ -441,6 +891,9 @@ function App() {
     setCopilotToolsUsed([])
     setCopilotError(null)
     setCopilotLoading(false)
+    setEvaluationDatasets([])
+    setEvaluationDatasetsError(null)
+    setEvaluationDatasetsLoading(false)
     setEvaluationRuns([])
     setEvaluationRunsError(null)
     setEvaluationRunsLoading(false)
@@ -468,6 +921,9 @@ function App() {
     setMembers([])
     setMembersError(null)
     setMembersLoading(true)
+    setInvitations([])
+    setInvitationsError(null)
+    setTeamMessage(null)
     setCustomers([])
     setCustomersError(null)
     setCustomersLoading(true)
@@ -491,11 +947,73 @@ function App() {
     resetDeploymentState()
     setIntegrationsLoading(true)
     setKnowledgeLoading(true)
+    setEvaluationDatasetsLoading(true)
     setEvaluationRunsLoading(true)
     setPendingAiActionsLoading(true)
     setAiHealthLoading(true)
     setAiTracesLoading(true)
     setIncidentsLoading(true)
+  }
+
+  async function handleInviteWorkspaceMember(payload: {
+    email: string
+    role: Exclude<WorkspaceRole, 'owner'>
+  }): Promise<InviteWorkspaceMemberResult> {
+    if (selectedWorkspaceId === null) {
+      throw new Error('No workspace selected.')
+    }
+
+    setTeamMessage(null)
+    const response = await inviteWorkspaceMember(selectedWorkspaceId, payload)
+    const result = response.data
+
+    if (isWorkspaceInvitation(result)) {
+      setInvitations((current) =>
+        [...current.filter((invitation) => invitation.email !== result.email), result].sort((left, right) =>
+          left.email.localeCompare(right.email),
+        ),
+      )
+      setTeamMessage(`Invitation created for ${result.email}.`)
+
+      return { type: 'invitation', invitation: result }
+    }
+
+    setMembers((current) =>
+      [...current, result].sort((left, right) => left.name.localeCompare(right.name)),
+    )
+    setInvitations((current) => current.filter((invitation) => invitation.email !== result.email))
+    setTeamMessage(`Added ${result.name} as ${result.role}.`)
+
+    return { type: 'member', member: result }
+  }
+
+  async function handleUpdateWorkspaceMemberRole(
+    memberId: number,
+    role: Exclude<WorkspaceRole, 'owner'>,
+  ) {
+    if (selectedWorkspaceId === null) {
+      return
+    }
+
+    setTeamMessage(null)
+    const response = await updateWorkspaceMember(selectedWorkspaceId, memberId, { role })
+    setMembers((current) =>
+      current
+        .map((member) => (member.id === memberId ? response.data : member))
+        .sort((left, right) => left.name.localeCompare(right.name)),
+    )
+    setTeamMessage(`Updated ${response.data.name}'s role to ${response.data.role}.`)
+  }
+
+  async function handleRemoveWorkspaceMember(memberId: number) {
+    if (selectedWorkspaceId === null) {
+      return
+    }
+
+    setTeamMessage(null)
+    await deleteWorkspaceMember(selectedWorkspaceId, memberId)
+    setMembers((current) => current.filter((member) => member.id !== memberId))
+    setTeamMessage('Member removed from workspace.')
   }
 
   async function handleCreateWorkspace(name: string) {
@@ -505,12 +1023,222 @@ function App() {
     selectWorkspace(response.data.id)
   }
 
-  async function handleRunEvaluation() {
+  async function handleCreateCustomer(payload: { name: string; description: string | null }) {
+    if (selectedWorkspaceId === null) {
+      return
+    }
+
+    setAppError(null)
+    const response = await createCustomer(selectedWorkspaceId, payload)
+    setCustomers((current) =>
+      [...current, response.data].sort((left, right) => left.name.localeCompare(right.name)),
+    )
+    selectCustomer(response.data.id)
+  }
+
+  async function handleUpdateCustomer(
+    customerId: number,
+    payload: { name: string; description: string | null },
+  ) {
+    if (selectedWorkspaceId === null) {
+      return
+    }
+
+    setAppError(null)
+    const response = await updateCustomer(selectedWorkspaceId, customerId, payload)
+    setCustomers((current) =>
+      current
+        .map((customer) => (customer.id === customerId ? response.data : customer))
+        .sort((left, right) => left.name.localeCompare(right.name)),
+    )
+  }
+
+  async function handleDeleteCustomer(customerId: number) {
+    if (selectedWorkspaceId === null) {
+      return
+    }
+
+    setAppError(null)
+    await deleteCustomer(selectedWorkspaceId, customerId)
+
+    const remaining = customers.filter((customer) => customer.id !== customerId)
+    setCustomers(remaining)
+
+    if (selectedCustomerId === customerId) {
+      if (remaining.length > 0) {
+        selectCustomer(remaining[0].id)
+      } else {
+        setSelectedCustomerId(null)
+        setDeployments([])
+        setDeploymentsError(null)
+        setDeploymentsLoading(false)
+        setSelectedDeploymentId(null)
+        resetDeploymentState()
+      }
+    }
+  }
+
+  async function handleCreateDeployment(payload: {
+    name: string
+    description: string | null
+    stage: DeploymentStage
+  }) {
+    if (selectedWorkspaceId === null || selectedCustomerId === null) {
+      return
+    }
+
+    setAppError(null)
+    const response = await createDeployment(selectedWorkspaceId, selectedCustomerId, payload)
+    setDeployments((current) =>
+      [...current, response.data].sort((left, right) => left.name.localeCompare(right.name)),
+    )
+    selectDeployment(response.data.id)
+  }
+
+  async function handleUpdateDeployment(
+    deploymentId: number,
+    payload: { name: string; description: string | null; stage: DeploymentStage },
+  ) {
+    if (selectedWorkspaceId === null || selectedCustomerId === null) {
+      return
+    }
+
+    setAppError(null)
+
+    const response = await updateDeployment(selectedWorkspaceId, selectedCustomerId, deploymentId, {
+      name: payload.name,
+      description: payload.description,
+    })
+
+    let updatedDeployment = response.data
+
+    if (payload.stage !== response.data.stage) {
+      const stageResponse = await updateDeploymentStage(
+        selectedWorkspaceId,
+        selectedCustomerId,
+        deploymentId,
+        payload.stage,
+      )
+      updatedDeployment = stageResponse.data
+    }
+
+    setDeployments((current) =>
+      current
+        .map((deployment) => (deployment.id === deploymentId ? updatedDeployment : deployment))
+        .sort((left, right) => left.name.localeCompare(right.name)),
+    )
+  }
+
+  async function handleUpdateDeploymentStage(deploymentId: number, stage: DeploymentStage) {
+    if (selectedWorkspaceId === null || selectedCustomerId === null) {
+      return
+    }
+
+    setAppError(null)
+    const response = await updateDeploymentStage(
+      selectedWorkspaceId,
+      selectedCustomerId,
+      deploymentId,
+      stage,
+    )
+    setDeployments((current) =>
+      current.map((deployment) => (deployment.id === deploymentId ? response.data : deployment)),
+    )
+  }
+
+  async function handleDeleteDeployment(deploymentId: number) {
+    if (selectedWorkspaceId === null || selectedCustomerId === null) {
+      return
+    }
+
+    setAppError(null)
+    await deleteDeployment(selectedWorkspaceId, selectedCustomerId, deploymentId)
+
+    const remaining = deployments.filter((deployment) => deployment.id !== deploymentId)
+    setDeployments(remaining)
+
+    if (selectedDeploymentId === deploymentId) {
+      if (remaining.length > 0) {
+        selectDeployment(remaining[0].id)
+      } else {
+        setSelectedDeploymentId(null)
+        resetDeploymentState()
+      }
+    }
+  }
+
+  async function handleCreateIntegration(payload: {
+    type: 'rest_api' | 'webhook'
+    name: string
+    base_url?: string | null
+    endpoint?: string | null
+    api_key?: string
+    webhook_secret?: string
+  }) {
+    if (selectedWorkspaceId === null || selectedCustomerId === null || selectedDeploymentId === null) {
+      return
+    }
+
+    setIntegrationsError(null)
+    const response = await createIntegration(
+      selectedWorkspaceId,
+      selectedCustomerId,
+      selectedDeploymentId,
+      payload,
+    )
+    setIntegrations((current) =>
+      [...current, response.data].sort((left, right) => left.name.localeCompare(right.name)),
+    )
+  }
+
+  async function handleUpdateIntegration(
+    integrationId: number,
+    payload: {
+      name: string
+      base_url?: string | null
+      endpoint?: string | null
+      api_key?: string
+      webhook_secret?: string
+    },
+  ) {
+    if (selectedWorkspaceId === null || selectedCustomerId === null || selectedDeploymentId === null) {
+      return
+    }
+
+    setIntegrationsError(null)
+    const response = await updateIntegration(
+      selectedWorkspaceId,
+      selectedCustomerId,
+      selectedDeploymentId,
+      integrationId,
+      payload,
+    )
+    setIntegrations((current) =>
+      current.map((integration) => (integration.id === integrationId ? response.data : integration)),
+    )
+  }
+
+  async function handleDeleteIntegration(integrationId: number) {
+    if (selectedWorkspaceId === null || selectedCustomerId === null || selectedDeploymentId === null) {
+      return
+    }
+
+    setIntegrationsError(null)
+    await deleteIntegration(
+      selectedWorkspaceId,
+      selectedCustomerId,
+      selectedDeploymentId,
+      integrationId,
+    )
+    setIntegrations((current) => current.filter((integration) => integration.id !== integrationId))
+    setIntegrationTestMessage(null)
+  }
+
+  async function handleRunEvaluation(datasetId: number) {
     if (
       selectedWorkspaceId === null ||
       selectedCustomerId === null ||
-      selectedDeploymentId === null ||
-      evaluationDatasetId === null
+      selectedDeploymentId === null
     ) {
       return
     }
@@ -522,28 +1250,208 @@ function App() {
         selectedWorkspaceId,
         selectedCustomerId,
         selectedDeploymentId,
-        evaluationDatasetId,
+        datasetId,
       )
       setEvaluationRuns((current) => [response.data, ...current])
       setEvaluationRunMessage(
         `Evaluation completed: ${response.data.metrics.passed_cases}/${response.data.metrics.total_cases} passed.`,
       )
+      await refreshEvaluationData()
     } catch (error) {
       setEvaluationRunMessage(error instanceof Error ? error.message : 'Evaluation run failed.')
     }
   }
 
-  async function refreshPendingAiActions() {
-    if (selectedWorkspaceId === null || selectedCustomerId === null || selectedDeploymentId === null) {
+  async function handleCreateEvaluationDataset(payload: {
+    name: string
+    description: string | null
+  }) {
+    if (
+      selectedWorkspaceId === null ||
+      selectedCustomerId === null ||
+      selectedDeploymentId === null
+    ) {
       return
     }
 
-    const response = await fetchPendingAiActions(
+    const response = await createEvaluationDataset(
       selectedWorkspaceId,
       selectedCustomerId,
       selectedDeploymentId,
+      payload,
     )
-    setPendingAiActions(response.data)
+
+    setEvaluationDatasets((current) =>
+      [...current, response.data].sort((left, right) => left.name.localeCompare(right.name)),
+    )
+    setEvaluationDatasetId(response.data.id)
+    setEvaluationRunMessage(`Created dataset "${response.data.name}".`)
+  }
+
+  async function handleUpdateEvaluationDataset(
+    datasetId: number,
+    payload: { name: string; description: string | null },
+  ) {
+    if (
+      selectedWorkspaceId === null ||
+      selectedCustomerId === null ||
+      selectedDeploymentId === null
+    ) {
+      return
+    }
+
+    const response = await updateEvaluationDataset(
+      selectedWorkspaceId,
+      selectedCustomerId,
+      selectedDeploymentId,
+      datasetId,
+      payload,
+    )
+
+    setEvaluationDatasets((current) =>
+      current
+        .map((dataset) => (dataset.id === datasetId ? response.data : dataset))
+        .sort((left, right) => left.name.localeCompare(right.name)),
+    )
+    setEvaluationRunMessage(`Updated dataset "${response.data.name}".`)
+  }
+
+  async function handleDeleteEvaluationDataset(datasetId: number) {
+    if (
+      selectedWorkspaceId === null ||
+      selectedCustomerId === null ||
+      selectedDeploymentId === null
+    ) {
+      return
+    }
+
+    await deleteEvaluationDataset(
+      selectedWorkspaceId,
+      selectedCustomerId,
+      selectedDeploymentId,
+      datasetId,
+    )
+
+    setEvaluationDatasets((current) => {
+      const next = current.filter((dataset) => dataset.id !== datasetId)
+      setEvaluationDatasetId((selectedId) => {
+        if (selectedId === datasetId) {
+          return next[0]?.id ?? null
+        }
+
+        return selectedId
+      })
+
+      return next
+    })
+    setEvaluationRunMessage('Evaluation dataset deleted.')
+  }
+
+  async function handleCreateEvaluationCase(
+    datasetId: number,
+    payload: {
+      input: string
+      expected_behavior: string
+      expected_tools: string[] | null
+      expected_sources: string[] | null
+    },
+  ) {
+    if (
+      selectedWorkspaceId === null ||
+      selectedCustomerId === null ||
+      selectedDeploymentId === null
+    ) {
+      return
+    }
+
+    const response = await createEvaluationCase(
+      selectedWorkspaceId,
+      selectedCustomerId,
+      selectedDeploymentId,
+      datasetId,
+      payload,
+    )
+
+    setEvaluationDatasets((current) =>
+      current.map((dataset) =>
+        dataset.id === datasetId
+          ? { ...dataset, cases: [...(dataset.cases ?? []), response.data] }
+          : dataset,
+      ),
+    )
+    setEvaluationRunMessage('Evaluation case added.')
+  }
+
+  async function handleUpdateEvaluationCase(
+    datasetId: number,
+    caseId: number,
+    payload: {
+      input: string
+      expected_behavior: string
+      expected_tools: string[] | null
+      expected_sources: string[] | null
+    },
+  ) {
+    if (
+      selectedWorkspaceId === null ||
+      selectedCustomerId === null ||
+      selectedDeploymentId === null
+    ) {
+      return
+    }
+
+    const response = await updateEvaluationCase(
+      selectedWorkspaceId,
+      selectedCustomerId,
+      selectedDeploymentId,
+      datasetId,
+      caseId,
+      payload,
+    )
+
+    setEvaluationDatasets((current) =>
+      current.map((dataset) =>
+        dataset.id === datasetId
+          ? {
+              ...dataset,
+              cases: (dataset.cases ?? []).map((evaluationCase) =>
+                evaluationCase.id === caseId ? response.data : evaluationCase,
+              ),
+            }
+          : dataset,
+      ),
+    )
+    setEvaluationRunMessage('Evaluation case updated.')
+  }
+
+  async function handleDeleteEvaluationCase(datasetId: number, caseId: number) {
+    if (
+      selectedWorkspaceId === null ||
+      selectedCustomerId === null ||
+      selectedDeploymentId === null
+    ) {
+      return
+    }
+
+    await deleteEvaluationCase(
+      selectedWorkspaceId,
+      selectedCustomerId,
+      selectedDeploymentId,
+      datasetId,
+      caseId,
+    )
+
+    setEvaluationDatasets((current) =>
+      current.map((dataset) =>
+        dataset.id === datasetId
+          ? {
+              ...dataset,
+              cases: (dataset.cases ?? []).filter((evaluationCase) => evaluationCase.id !== caseId),
+            }
+          : dataset,
+      ),
+    )
+    setEvaluationRunMessage('Evaluation case deleted.')
   }
 
   async function handleApproveAiAction(actionId: number) {
@@ -553,7 +1461,7 @@ function App() {
 
     setAiActionMessage(null)
     await approveAiAction(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId, actionId)
-    await refreshPendingAiActions()
+    await Promise.all([refreshPendingAiActions(), refreshDeployments()])
     setAiActionMessage('Action approved and executed.')
   }
 
@@ -582,6 +1490,7 @@ function App() {
 
     setCopilotLoading(true)
     setCopilotError(null)
+    setCopilotErrorReference(null)
     setCopilotAnswer(null)
     setCopilotToolsUsed([])
 
@@ -594,10 +1503,13 @@ function App() {
       )
       setCopilotAnswer(response.data.answer)
       setCopilotToolsUsed(response.data.tools_used)
+      await refreshPendingAiActions()
     } catch (error) {
       setCopilotError(error instanceof Error ? error.message : 'Copilot request failed.')
+      setCopilotErrorReference(apiErrorReference(error))
     } finally {
       setCopilotLoading(false)
+      await refreshObservabilityData()
     }
   }
 
@@ -680,6 +1592,7 @@ function App() {
     setSelectedWorkspaceId(null)
     setSelectedCustomerId(null)
     setMembers([])
+    setInvitations([])
     setCustomers([])
     setDeployments([])
     setSelectedDeploymentId(null)
@@ -698,6 +1611,10 @@ function App() {
             membersLoading={membersLoading}
             membersError={membersError}
             deployments={deployments}
+            integrations={integrations}
+            integrationsLoading={integrationsLoading}
+            knowledgeDocuments={knowledgeDocuments}
+            knowledgeLoading={knowledgeLoading}
             aiHealth={aiHealth}
             aiHealthLoading={aiHealthLoading}
             pendingActions={pendingAiActions}
@@ -705,14 +1622,33 @@ function App() {
             incidentsLoading={incidentsLoading}
           />
         )
+      case 'team':
+        return (
+          <TeamPage
+            workspace={selectedWorkspace}
+            members={members}
+            invitations={invitations}
+            loading={membersLoading}
+            error={membersError}
+            invitationsError={invitationsError}
+            message={teamMessage}
+            onInviteMember={handleInviteWorkspaceMember}
+            onUpdateMemberRole={handleUpdateWorkspaceMemberRole}
+            onRemoveMember={handleRemoveWorkspaceMember}
+          />
+        )
       case 'integrations':
         return (
           <IntegrationsPage
+            workspace={selectedWorkspace}
             deployment={selectedDeployment}
             integrations={integrations}
             loading={integrationsLoading}
             error={integrationsError}
             testMessage={integrationTestMessage}
+            onCreate={handleCreateIntegration}
+            onUpdate={handleUpdateIntegration}
+            onDelete={handleDeleteIntegration}
             onTest={handleTestIntegration}
           />
         )
@@ -724,6 +1660,7 @@ function App() {
             answer={copilotAnswer}
             toolsUsed={copilotToolsUsed}
             error={copilotError}
+            errorReference={copilotErrorReference}
             loading={copilotLoading}
             onQuestionChange={setCopilotQuestion}
             onSubmit={handleAskCopilot}
@@ -744,12 +1681,23 @@ function App() {
       case 'evals':
         return (
           <EvalsPage
+            workspace={selectedWorkspace}
             deployment={selectedDeployment}
+            datasets={evaluationDatasets}
+            datasetsLoading={evaluationDatasetsLoading}
+            datasetsError={evaluationDatasetsError}
+            selectedDatasetId={evaluationDatasetId}
+            onSelectDataset={setEvaluationDatasetId}
             runs={evaluationRuns}
-            loading={evaluationRunsLoading}
-            error={evaluationRunsError}
-            canRun={evaluationDatasetId !== null}
+            runsLoading={evaluationRunsLoading}
+            runsError={evaluationRunsError}
             runMessage={evaluationRunMessage}
+            onCreateDataset={handleCreateEvaluationDataset}
+            onUpdateDataset={handleUpdateEvaluationDataset}
+            onDeleteDataset={handleDeleteEvaluationDataset}
+            onCreateCase={handleCreateEvaluationCase}
+            onUpdateCase={handleUpdateEvaluationCase}
+            onDeleteCase={handleDeleteEvaluationCase}
             onRun={handleRunEvaluation}
           />
         )
@@ -761,6 +1709,8 @@ function App() {
             loading={pendingAiActionsLoading}
             error={pendingAiActionsError}
             message={aiActionMessage}
+            currentUserId={user?.id ?? null}
+            workspaceRole={selectedWorkspace?.current_user_role}
             onApprove={handleApproveAiAction}
             onReject={handleRejectAiAction}
           />
@@ -783,6 +1733,85 @@ function App() {
       default:
         return null
     }
+  }
+
+  function renderContextEmptyState() {
+    const workspaceLevelViews: AppView[] = ['dashboard', 'team']
+
+    if (customersLoading || deploymentsLoading) {
+      return <LoadingState label="Loading context…" />
+    }
+
+    if (customersError) {
+      return <p role="alert">{customersError}</p>
+    }
+
+    if (
+      selectedWorkspace &&
+      customers.length === 0 &&
+      !workspaceLevelViews.includes(activeView)
+    ) {
+      return (
+        <EmptyState
+          title="No customers yet"
+          description="Create a customer to start managing deployments and integrations."
+          action={
+            canManageCustomers(selectedWorkspace.current_user_role) ? (
+              <p className="state__hint">Use the Create button in the customer context bar above.</p>
+            ) : (
+              <p className="state__hint">Ask a workspace admin to create a customer.</p>
+            )
+          }
+        />
+      )
+    }
+
+    if (deploymentsError) {
+      return <p role="alert">{deploymentsError}</p>
+    }
+
+    if (
+      selectedCustomer &&
+      deployments.length === 0 &&
+      !workspaceLevelViews.includes(activeView)
+    ) {
+      return (
+        <EmptyState
+          title="No deployments yet"
+          description="Create a deployment to connect integrations, knowledge, and copilot workflows."
+          action={
+            canManageDeployments(selectedWorkspace?.current_user_role) ? (
+              <p className="state__hint">Use the Create button in the deployment context bar above.</p>
+            ) : (
+              <p className="state__hint">Ask an engineer or admin to create a deployment.</p>
+            )
+          }
+        />
+      )
+    }
+
+    return null
+  }
+
+  const contextEmptyState = renderContextEmptyState()
+
+  if (invitationToken) {
+    return (
+      <AcceptInvitationPage
+        token={invitationToken}
+        onAccepted={() => {
+          setInvitationToken(null)
+          setSelectedWorkspaceId(null)
+          setMembers([])
+          setInvitations([])
+          setMembersError(null)
+          setInvitationsError(null)
+          setTeamMessage(null)
+          setActiveView('team')
+          handleAuthenticated()
+        }}
+      />
+    )
   }
 
   if (loadingUser) {
@@ -819,15 +1848,21 @@ function App() {
       onCustomerChange={selectCustomer}
       onDeploymentChange={selectDeployment}
       onCreateWorkspace={handleCreateWorkspace}
+      onCreateCustomer={handleCreateCustomer}
+      onUpdateCustomer={handleUpdateCustomer}
+      onDeleteCustomer={handleDeleteCustomer}
+      onCreateDeployment={handleCreateDeployment}
+      onUpdateDeployment={handleUpdateDeployment}
+      onUpdateDeploymentStage={handleUpdateDeploymentStage}
+      onDeleteDeployment={handleDeleteDeployment}
       pendingApprovals={pendingAiActions.length}
     >
-      {appError && <p role="alert">{appError}</p>}
-      {(customersLoading || deploymentsLoading) && activeView === 'dashboard' && (
-        <LoadingState label="Loading context…" />
+      {appError && (
+        <div className="app-alert" role="alert">
+          {appError}
+        </div>
       )}
-      {customersError && <p role="alert">{customersError}</p>}
-      {deploymentsError && <p role="alert">{deploymentsError}</p>}
-      {renderView()}
+      {contextEmptyState ?? renderView()}
     </AppLayout>
   )
 }

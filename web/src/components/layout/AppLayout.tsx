@@ -2,7 +2,8 @@ import type { AppView } from './Sidebar'
 import { ContextBar } from './ContextBar'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
-import type { Customer, Deployment, Workspace } from '../../types'
+import { PageHeader } from '../ui/PageHeader'
+import type { Customer, Deployment, DeploymentStage, Workspace } from '../../types'
 
 type AppLayoutProps = {
   activeView: AppView
@@ -25,18 +26,60 @@ type AppLayoutProps = {
   onCustomerChange: (id: number) => void
   onDeploymentChange: (id: number) => void
   onCreateWorkspace: (name: string) => Promise<void>
+  onCreateCustomer: (payload: { name: string; description: string | null }) => Promise<void>
+  onUpdateCustomer: (
+    customerId: number,
+    payload: { name: string; description: string | null },
+  ) => Promise<void>
+  onDeleteCustomer: (customerId: number) => Promise<void>
+  onCreateDeployment: (payload: {
+    name: string
+    description: string | null
+    stage: DeploymentStage
+  }) => Promise<void>
+  onUpdateDeployment: (
+    deploymentId: number,
+    payload: { name: string; description: string | null; stage: DeploymentStage },
+  ) => Promise<void>
+  onUpdateDeploymentStage: (deploymentId: number, stage: DeploymentStage) => Promise<void>
+  onDeleteDeployment: (deploymentId: number) => Promise<void>
   pendingApprovals: number
   children: React.ReactNode
 }
 
-const viewTitles: Record<AppView, string> = {
-  dashboard: 'Dashboard',
-  integrations: 'Integrations',
-  copilot: 'AI Copilot',
-  knowledge: 'Knowledge Base',
-  evals: 'AI Evaluations',
-  approvals: 'Pending Approvals',
-  observability: 'Observability & Incidents',
+const viewMeta: Record<AppView, { title: string; description: string }> = {
+  dashboard: {
+    title: 'Dashboard',
+    description: 'Deployment overview, integrations health, and operational signals for your workspace.',
+  },
+  team: {
+    title: 'Team',
+    description: 'Manage workspace members, roles, and access for your organization.',
+  },
+  integrations: {
+    title: 'Integrations',
+    description: 'Manage connected systems and test API connections for the active deployment.',
+  },
+  copilot: {
+    title: 'AI Copilot',
+    description: 'Ask operational questions grounded in deployment context, knowledge, and live data.',
+  },
+  knowledge: {
+    title: 'Knowledge Base',
+    description: 'Upload and manage documents indexed for copilot retrieval-augmented generation.',
+  },
+  evals: {
+    title: 'AI Evaluations',
+    description: 'Run quality benchmarks and review pass rates against expected copilot behavior.',
+  },
+  approvals: {
+    title: 'Pending Approvals',
+    description: 'Review and approve AI-proposed actions before they execute on customer systems.',
+  },
+  observability: {
+    title: 'Observability',
+    description: 'Monitor AI health metrics, copilot traces, and operational incidents.',
+  },
 }
 
 export function AppLayout({
@@ -60,9 +103,18 @@ export function AppLayout({
   onCustomerChange,
   onDeploymentChange,
   onCreateWorkspace,
+  onCreateCustomer,
+  onUpdateCustomer,
+  onDeleteCustomer,
+  onCreateDeployment,
+  onUpdateDeployment,
+  onUpdateDeploymentStage,
+  onDeleteDeployment,
   pendingApprovals,
   children,
 }: AppLayoutProps) {
+  const meta = viewMeta[activeView]
+
   return (
     <div className="app-shell">
       <Sidebar
@@ -94,12 +146,17 @@ export function AppLayout({
           onCustomerChange={onCustomerChange}
           onDeploymentChange={onDeploymentChange}
           onCreateWorkspace={onCreateWorkspace}
+          onCreateCustomer={onCreateCustomer}
+          onUpdateCustomer={onUpdateCustomer}
+          onDeleteCustomer={onDeleteCustomer}
+          onCreateDeployment={onCreateDeployment}
+          onUpdateDeployment={onUpdateDeployment}
+          onUpdateDeploymentStage={onUpdateDeploymentStage}
+          onDeleteDeployment={onDeleteDeployment}
         />
 
         <main className="app-content">
-          <header className="page-header">
-            <h1>{viewTitles[activeView]}</h1>
-          </header>
+          <PageHeader title={meta.title} description={meta.description} />
           {children}
         </main>
       </div>

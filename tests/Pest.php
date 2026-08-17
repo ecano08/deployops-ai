@@ -115,7 +115,7 @@ function incidentsPath(Workspace $workspace, Customer $customer, Deployment $dep
     return '/api/workspaces/'.$workspace->id.'/customers/'.$customer->id.'/deployments/'.$deployment->id.'/incidents';
 }
 
-function openAiToolCallResponse(string $name, string $arguments = '{}', string $responseId = 'resp_tool'): array
+function openAiToolCallResponse(string $name, string $arguments = '{}', string $responseId = 'resp_tool', string $callId = 'call_123'): array
 {
     return [
         'id' => $responseId,
@@ -123,11 +123,31 @@ function openAiToolCallResponse(string $name, string $arguments = '{}', string $
         'output' => [
             [
                 'type' => 'function_call',
-                'call_id' => 'call_123',
+                'call_id' => $callId,
                 'name' => $name,
                 'arguments' => $arguments,
             ],
         ],
+    ];
+}
+
+/**
+ * @param  array<int, array{call_id: string, name: string, arguments?: string}>  $calls
+ */
+function openAiMultipleToolCallResponse(array $calls, string $responseId = 'resp_tool'): array
+{
+    return [
+        'id' => $responseId,
+        'status' => 'completed',
+        'output' => array_map(
+            fn (array $call): array => [
+                'type' => 'function_call',
+                'call_id' => $call['call_id'],
+                'name' => $call['name'],
+                'arguments' => $call['arguments'] ?? '{}',
+            ],
+            $calls,
+        ),
     ];
 }
 

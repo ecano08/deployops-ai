@@ -94,6 +94,22 @@ class WorkspacePolicy
     }
 
     /**
+     * Determine whether the user can list workspace invitations.
+     */
+    public function viewInvitations(User $user, Workspace $workspace): bool
+    {
+        return $this->viewMembers($user, $workspace);
+    }
+
+    /**
+     * Determine whether the user can create workspace invitations.
+     */
+    public function createInvitation(User $user, Workspace $workspace): bool
+    {
+        return $this->addMember($user, $workspace);
+    }
+
+    /**
      * Determine whether the user can change a member's role.
      */
     public function updateMember(User $user, Workspace $workspace, User $member): bool

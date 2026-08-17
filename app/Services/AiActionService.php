@@ -30,20 +30,37 @@ class AiActionService
 
         $actionType->validatePayload($payload);
 
-        return DB::transaction(function () use ($requester, $deployment, $actionType, $payload): AiProposedAction {
+        $normalizedPayload = $actionType->normalizePayload($payload);
+
+        return DB::transaction(function () use ($requester, $deployment, $actionType, $normalizedPayload): AiProposedAction {
+            Deployment::query()
+                ->whereKey($deployment->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $existing = $this->findEquivalentPendingAction(
+                deployment: $deployment,
+                actionType: $actionType,
+                normalizedPayload: $normalizedPayload,
+            );
+
+            if ($existing !== null) {
+                return $existing;
+            }
+
             $action = AiProposedAction::query()->create([
                 'workspace_id' => $deployment->workspace_id,
                 'customer_id' => $deployment->customer_id,
                 'deployment_id' => $deployment->id,
                 'action_type' => $actionType,
-                'payload' => $payload,
+                'payload' => $normalizedPayload,
                 'status' => AiActionStatus::Pending,
                 'requested_by' => $requester->id,
             ]);
 
             $this->recordAuditEvent($action, AiActionAuditEventType::Proposed, $requester, [
                 'action_type' => $actionType->value,
-                'payload' => $payload,
+                'payload' => $normalizedPayload,
             ]);
 
             return $action;
@@ -94,13 +111,13 @@ class AiActionService
                 ]);
             }
 
-            return $locked->fresh(['auditEvents', 'requester', 'approver']);
+            return $locked->fresh(['auditEvents', 'requester', 'approver', 'workspace.members']);
         });
     }
 
     public function reject(AiProposedAction $action, User $approver): AiProposedAction
     {
-        Gate::forUser($approver)->authorize('approve', $action);
+        Gate::forUser($approver)->authorize('reject', $action);
 
         return DB::transaction(function () use ($action, $approver): AiProposedAction {
             $locked = AiProposedAction::query()
@@ -121,8 +138,34 @@ class AiActionService
 
             $this->recordAuditEvent($locked, AiActionAuditEventType::Rejected, $approver);
 
-            return $locked->fresh(['auditEvents', 'requester', 'approver']);
+            return $locked->fresh(['auditEvents', 'requester', 'approver', 'workspace.members']);
         });
+    }
+
+    /**
+     * @param  array<string, mixed>  $normalizedPayload
+     */
+    private function findEquivalentPendingAction(
+        Deployment $deployment,
+        AiActionType $actionType,
+        array $normalizedPayload,
+    ): ?AiProposedAction {
+        $pendingActions = AiProposedAction::query()
+            ->where('workspace_id', $deployment->workspace_id)
+            ->where('customer_id', $deployment->customer_id)
+            ->where('deployment_id', $deployment->id)
+            ->where('action_type', $actionType)
+            ->where('status', AiActionStatus::Pending)
+            ->lockForUpdate()
+            ->get();
+
+        foreach ($pendingActions as $pendingAction) {
+            if ($actionType->normalizePayload($pendingAction->payload ?? []) === $normalizedPayload) {
+                return $pendingAction;
+            }
+        }
+
+        return null;
     }
 
     /**

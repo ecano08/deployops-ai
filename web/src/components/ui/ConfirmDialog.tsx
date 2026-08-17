@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { Button } from './Button'
 
 type ConfirmDialogProps = {
@@ -8,8 +8,7 @@ type ConfirmDialogProps = {
   confirmLabel?: string
   cancelLabel?: string
   variant?: 'danger' | 'primary'
-  loading?: boolean
-  onConfirm: () => void
+  onConfirm: () => void | Promise<void>
   onCancel: () => void
 }
 
@@ -20,13 +19,46 @@ export function ConfirmDialog({
   confirmLabel = 'Confirm',
   cancelLabel = 'Cancel',
   variant = 'danger',
-  loading = false,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
   const titleId = useId()
   const descriptionId = useId()
   const cancelRef = useRef<HTMLButtonElement>(null)
+  const confirmingRef = useRef(false)
+  const [confirming, setConfirming] = useState(false)
+  const [confirmError, setConfirmError] = useState<string | null>(null)
+
+  const handleDismiss = useCallback(() => {
+    if (confirmingRef.current) {
+      return
+    }
+
+    setConfirmError(null)
+    onCancel()
+  }, [onCancel])
+
+  const handleConfirmClick = useCallback(async () => {
+    if (confirmingRef.current) {
+      return
+    }
+
+    confirmingRef.current = true
+    setConfirming(true)
+    setConfirmError(null)
+
+    try {
+      await onConfirm()
+      onCancel()
+    } catch (error) {
+      setConfirmError(
+        error instanceof Error ? error.message : 'Request failed. Please try again.',
+      )
+    } finally {
+      confirmingRef.current = false
+      setConfirming(false)
+    }
+  }, [onConfirm, onCancel])
 
   useEffect(() => {
     if (!open) {
@@ -37,21 +69,21 @@ export function ConfirmDialog({
 
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
-        onCancel()
+        handleDismiss()
       }
     }
 
     document.addEventListener('keydown', onKeyDown)
 
     return () => document.removeEventListener('keydown', onKeyDown)
-  }, [open, onCancel])
+  }, [open, handleDismiss])
 
   if (!open) {
     return null
   }
 
   return (
-    <div className="dialog-backdrop" role="presentation" onClick={onCancel}>
+    <div className="dialog-backdrop" role="presentation" onClick={handleDismiss}>
       <div
         className="dialog"
         role="alertdialog"
@@ -66,15 +98,20 @@ export function ConfirmDialog({
         <p id={descriptionId} className="dialog__description">
           {description}
         </p>
+        {confirmError && (
+          <p className="dialog__error" role="alert">
+            {confirmError}
+          </p>
+        )}
         <div className="dialog__actions">
-          <Button ref={cancelRef} variant="ghost" size="sm" onClick={onCancel} disabled={loading}>
+          <Button ref={cancelRef} variant="ghost" size="sm" onClick={handleDismiss} disabled={confirming}>
             {cancelLabel}
           </Button>
           <Button
             variant={variant === 'danger' ? 'danger' : 'primary'}
             size="sm"
-            loading={loading}
-            onClick={onConfirm}
+            loading={confirming}
+            onClick={handleConfirmClick}
           >
             {confirmLabel}
           </Button>

@@ -25,7 +25,11 @@ class AiProposedActionResource extends JsonResource
             'action_type' => $actionType instanceof AiActionType ? $actionType->value : (string) $actionType,
             'payload' => $this->sanitizedPayload(),
             'status' => $status instanceof AiActionStatus ? $status->value : (string) $status,
-            'requested_by' => $this->requested_by,
+            'requested_by' => AiActionRequesterResource::make(
+                $this->relationLoaded('requester') ? $this->requester : null,
+                $this->requested_by,
+                $this->relationLoaded('workspace') ? $this->workspace : null,
+            ),
             'approved_by' => $this->approved_by,
             'executed_at' => $this->executed_at,
             'error_message' => $this->error_message,
