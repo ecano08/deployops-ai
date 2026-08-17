@@ -698,6 +698,10 @@ function App() {
             membersLoading={membersLoading}
             membersError={membersError}
             deployments={deployments}
+            integrations={integrations}
+            integrationsLoading={integrationsLoading}
+            knowledgeDocuments={knowledgeDocuments}
+            knowledgeLoading={knowledgeLoading}
             aiHealth={aiHealth}
             aiHealthLoading={aiHealthLoading}
             pendingActions={pendingAiActions}
@@ -821,12 +825,24 @@ function App() {
       onCreateWorkspace={handleCreateWorkspace}
       pendingApprovals={pendingAiActions.length}
     >
-      {appError && <p role="alert">{appError}</p>}
+      {appError && (
+        <div className="app-alert" role="alert">
+          {appError}
+        </div>
+      )}
       {(customersLoading || deploymentsLoading) && activeView === 'dashboard' && (
         <LoadingState label="Loading context…" />
       )}
-      {customersError && <p role="alert">{customersError}</p>}
-      {deploymentsError && <p role="alert">{deploymentsError}</p>}
+      {customersError && (
+        <div className="app-alert" role="alert">
+          {customersError}
+        </div>
+      )}
+      {deploymentsError && (
+        <div className="app-alert" role="alert">
+          {deploymentsError}
+        </div>
+      )}
       {renderView()}
     </AppLayout>
   )

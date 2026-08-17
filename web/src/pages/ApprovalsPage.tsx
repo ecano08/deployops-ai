@@ -1,10 +1,12 @@
 import { useState } from 'react'
+import { Check, CheckSquare, Layers, X } from 'lucide-react'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EmptyState } from '../components/ui/EmptyState'
 import { ErrorState } from '../components/ui/ErrorState'
+import { Icon } from '../components/ui/Icon'
 import { LoadingState } from '../components/ui/LoadingState'
 import { Alert } from '../components/ui/Alert'
 import type { AiProposedAction, Deployment } from '../types'
@@ -39,6 +41,7 @@ export function ApprovalsPage({
       <EmptyState
         title="Select a deployment"
         description="Review AI-proposed actions that require human approval before execution."
+        icon={Layers}
       />
     )
   }
@@ -65,7 +68,22 @@ export function ApprovalsPage({
 
   return (
     <div className="page-stack">
-      {message && <Alert variant="info">{message}</Alert>}
+      {message && <Alert variant="success">{message}</Alert>}
+
+      {actions.length > 0 && (
+        <Card className="stat-card">
+          <div className="card__body">
+            <div className="stat-card__header">
+              <span className="stat-label">Pending review</span>
+              <span className="stat-card__icon stat-card__icon--warning">
+                <Icon icon={CheckSquare} size="sm" />
+              </span>
+            </div>
+            <p className="stat-value">{actions.length}</p>
+            <p className="stat-label">actions awaiting approval</p>
+          </div>
+        </Card>
+      )}
 
       <Card
         title="Pending AI actions"
@@ -75,8 +93,10 @@ export function ApprovalsPage({
         {error && <ErrorState message={error} />}
         {!loading && !error && actions.length === 0 && (
           <EmptyState
+            compact
             title="No pending actions"
             description="When the copilot proposes stage changes or other sensitive operations, they appear here."
+            icon={CheckSquare}
           />
         )}
         {!loading && actions.length > 0 && (
@@ -97,6 +117,7 @@ export function ApprovalsPage({
                     size="sm"
                     onClick={() => setConfirmAction({ action, type: 'approve' })}
                   >
+                    <Icon icon={Check} size="xs" />
                     Approve
                   </Button>
                   <Button
@@ -104,6 +125,7 @@ export function ApprovalsPage({
                     size="sm"
                     onClick={() => setConfirmAction({ action, type: 'reject' })}
                   >
+                    <Icon icon={X} size="xs" />
                     Reject
                   </Button>
                 </div>

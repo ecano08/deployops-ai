@@ -2,6 +2,7 @@ import type { AppView } from './Sidebar'
 import { ContextBar } from './ContextBar'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
+import { PageHeader } from '../ui/PageHeader'
 import type { Customer, Deployment, Workspace } from '../../types'
 
 type AppLayoutProps = {
@@ -29,14 +30,35 @@ type AppLayoutProps = {
   children: React.ReactNode
 }
 
-const viewTitles: Record<AppView, string> = {
-  dashboard: 'Dashboard',
-  integrations: 'Integrations',
-  copilot: 'AI Copilot',
-  knowledge: 'Knowledge Base',
-  evals: 'AI Evaluations',
-  approvals: 'Pending Approvals',
-  observability: 'Observability & Incidents',
+const viewMeta: Record<AppView, { title: string; description: string }> = {
+  dashboard: {
+    title: 'Dashboard',
+    description: 'Deployment overview, integrations health, and operational signals for your workspace.',
+  },
+  integrations: {
+    title: 'Integrations',
+    description: 'Manage connected systems and test API connections for the active deployment.',
+  },
+  copilot: {
+    title: 'AI Copilot',
+    description: 'Ask operational questions grounded in deployment context, knowledge, and live data.',
+  },
+  knowledge: {
+    title: 'Knowledge Base',
+    description: 'Upload and manage documents indexed for copilot retrieval-augmented generation.',
+  },
+  evals: {
+    title: 'AI Evaluations',
+    description: 'Run quality benchmarks and review pass rates against expected copilot behavior.',
+  },
+  approvals: {
+    title: 'Pending Approvals',
+    description: 'Review and approve AI-proposed actions before they execute on customer systems.',
+  },
+  observability: {
+    title: 'Observability',
+    description: 'Monitor AI health metrics, copilot traces, and operational incidents.',
+  },
 }
 
 export function AppLayout({
@@ -63,6 +85,8 @@ export function AppLayout({
   pendingApprovals,
   children,
 }: AppLayoutProps) {
+  const meta = viewMeta[activeView]
+
   return (
     <div className="app-shell">
       <Sidebar
@@ -97,9 +121,7 @@ export function AppLayout({
         />
 
         <main className="app-content">
-          <header className="page-header">
-            <h1>{viewTitles[activeView]}</h1>
-          </header>
+          <PageHeader title={meta.title} description={meta.description} />
           {children}
         </main>
       </div>

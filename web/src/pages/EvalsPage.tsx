@@ -1,9 +1,11 @@
+import { Activity, Layers, Play } from 'lucide-react'
 import { Badge } from '../components/ui/Badge'
 import { statusBadgeVariant } from '../components/ui/badgeUtils'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { EmptyState } from '../components/ui/EmptyState'
 import { ErrorState } from '../components/ui/ErrorState'
+import { Icon } from '../components/ui/Icon'
 import { LoadingState } from '../components/ui/LoadingState'
 import { Alert } from '../components/ui/Alert'
 import type { Deployment, EvaluationRun } from '../types'
@@ -32,13 +34,55 @@ export function EvalsPage({
       <EmptyState
         title="Select a deployment"
         description="Run evaluation datasets to measure copilot quality and latency."
+        icon={Layers}
       />
     )
   }
 
+  const latestRun = runs[0]
+  const passRate = latestRun ? Math.round((latestRun.metrics.pass_rate ?? 0) * 100) : null
+
   return (
     <div className="page-stack">
       {runMessage && <Alert variant="info">{runMessage}</Alert>}
+
+      {latestRun && (
+        <div className="stat-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+          <Card className="stat-card">
+            <div className="card__body">
+              <div className="stat-card__header">
+                <span className="stat-label">Total runs</span>
+                <span className="stat-card__icon stat-card__icon--accent">
+                  <Icon icon={Activity} size="sm" />
+                </span>
+              </div>
+              <p className="stat-value">{runs.length}</p>
+            </div>
+          </Card>
+          <Card className="stat-card">
+            <div className="card__body">
+              <div className="stat-card__header">
+                <span className="stat-label">Latest pass rate</span>
+                <span className="stat-card__icon stat-card__icon--success">
+                  <Icon icon={Activity} size="sm" />
+                </span>
+              </div>
+              <p className="stat-value">{passRate !== null ? `${passRate}%` : '—'}</p>
+            </div>
+          </Card>
+          <Card className="stat-card">
+            <div className="card__body">
+              <div className="stat-card__header">
+                <span className="stat-label">Avg latency</span>
+                <span className="stat-card__icon">
+                  <Icon icon={Activity} size="sm" />
+                </span>
+              </div>
+              <p className="stat-value">{latestRun.metrics.average_latency_ms}ms</p>
+            </div>
+          </Card>
+        </div>
+      )}
 
       <Card
         title="Evaluation runs"
@@ -46,6 +90,7 @@ export function EvalsPage({
         actions={
           canRun ? (
             <Button variant="primary" size="sm" onClick={onRun}>
+              <Icon icon={Play} size="xs" />
               Run dataset
             </Button>
           ) : undefined
@@ -55,8 +100,10 @@ export function EvalsPage({
         {error && <ErrorState message={error} />}
         {!loading && !error && runs.length === 0 && (
           <EmptyState
+            compact
             title="No evaluation runs yet"
             description="Run the evaluation dataset to benchmark copilot responses."
+            icon={Activity}
           />
         )}
         {!loading && runs.length > 0 && (

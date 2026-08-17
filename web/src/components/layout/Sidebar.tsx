@@ -1,3 +1,15 @@
+import type { LucideIcon } from 'lucide-react'
+import {
+  Activity,
+  BookOpen,
+  Bot,
+  CheckSquare,
+  LayoutDashboard,
+  Plug,
+  Radar,
+} from 'lucide-react'
+import { Icon } from '../ui/Icon'
+
 export type AppView =
   | 'dashboard'
   | 'integrations'
@@ -10,17 +22,17 @@ export type AppView =
 type NavItem = {
   id: AppView
   label: string
-  icon: string
+  icon: LucideIcon
 }
 
 const navItems: NavItem[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: '◫' },
-  { id: 'integrations', label: 'Integrations', icon: '⎔' },
-  { id: 'copilot', label: 'Copilot', icon: '✦' },
-  { id: 'knowledge', label: 'Knowledge', icon: '▤' },
-  { id: 'evals', label: 'Evaluations', icon: '◎' },
-  { id: 'approvals', label: 'Approvals', icon: '✓' },
-  { id: 'observability', label: 'Observability', icon: '◉' },
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'integrations', label: 'Integrations', icon: Plug },
+  { id: 'copilot', label: 'Copilot', icon: Bot },
+  { id: 'knowledge', label: 'Knowledge', icon: BookOpen },
+  { id: 'evals', label: 'Evaluations', icon: Activity },
+  { id: 'approvals', label: 'Approvals', icon: CheckSquare },
+  { id: 'observability', label: 'Observability', icon: Radar },
 ]
 
 type SidebarProps = {
@@ -42,13 +54,15 @@ export function Sidebar({ activeView, onNavigate, pendingApprovals, open, onClos
       <nav className={`sidebar ${open ? 'sidebar--open' : ''}`} aria-label="Main navigation">
         <div className="sidebar__brand">
           <span className="sidebar__logo" aria-hidden="true">
-            ◈
+            <Icon icon={Radar} size="sm" />
           </span>
           <div>
             <p className="sidebar__title">DeployOps AI</p>
             <p className="sidebar__subtitle">FDE Platform</p>
           </div>
         </div>
+
+        <p className="sidebar__section-label">Platform</p>
 
         <ul className="sidebar__nav">
           {navItems.map((item) => (
@@ -63,7 +77,7 @@ export function Sidebar({ activeView, onNavigate, pendingApprovals, open, onClos
                 }}
               >
                 <span className="sidebar__icon" aria-hidden="true">
-                  {item.icon}
+                  <Icon icon={item.icon} size="sm" />
                 </span>
                 <span>{item.label}</span>
                 {item.id === 'approvals' && pendingApprovals > 0 && (

@@ -1,4 +1,6 @@
 import { forwardRef, type ButtonHTMLAttributes } from 'react'
+import { Loader2 } from 'lucide-react'
+import { Icon } from './Icon'
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
 type ButtonSize = 'sm' | 'md'
@@ -37,12 +39,19 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     <button
       ref={ref}
       type="button"
-      className={`btn ${variantClass[variant]} ${sizeClass[size]} ${className}`.trim()}
+      className={`btn ${variantClass[variant]} ${sizeClass[size]} ${loading ? 'btn--loading' : ''} ${className}`.trim()}
       disabled={disabled || loading}
       aria-busy={loading}
       {...props}
     >
-      {loading ? 'Loading…' : children}
+      {loading ? (
+        <>
+          <Icon icon={Loader2} size="xs" className="spinner-icon" />
+          Loading…
+        </>
+      ) : (
+        children
+      )}
     </button>
   )
 })
