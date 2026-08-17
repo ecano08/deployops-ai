@@ -129,6 +129,26 @@ class WorkspacePolicy
         return $this->memberRole($user, $workspace)?->canManageMembers() ?? false;
     }
 
+    /**
+     * Determine whether the user can manage customers in the workspace.
+     */
+    public function manageCustomers(User $user, Workspace $workspace): bool
+    {
+        if ($workspace->owner_id === $user->id) {
+            return true;
+        }
+
+        return $this->memberRole($user, $workspace)?->canManageCustomers() ?? false;
+    }
+
+    /**
+     * Determine whether the user can manage deployments in the workspace.
+     */
+    public function manageDeployments(User $user, Workspace $workspace): bool
+    {
+        return $this->operate($user, $workspace);
+    }
+
     private function isProtectedOwner(Workspace $workspace, User $member): bool
     {
         if ($workspace->owner_id === $member->id) {

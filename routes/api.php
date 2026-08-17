@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\DeploymentController;
 use App\Http\Controllers\WorkspaceController;
 use App\Http\Controllers\WorkspaceMemberController;
 use Illuminate\Http\Client\ConnectionException;
@@ -57,4 +59,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/workspaces/{workspace}/members', [WorkspaceMemberController::class, 'store']);
     Route::patch('/workspaces/{workspace}/members/{member}', [WorkspaceMemberController::class, 'update'])->scopeBindings();
     Route::delete('/workspaces/{workspace}/members/{member}', [WorkspaceMemberController::class, 'destroy'])->scopeBindings();
+    Route::get('/workspaces/{workspace}/customers', [CustomerController::class, 'index']);
+    Route::post('/workspaces/{workspace}/customers', [CustomerController::class, 'store']);
+    Route::get('/workspaces/{workspace}/customers/{customer}', [CustomerController::class, 'show'])->scopeBindings();
+    Route::patch('/workspaces/{workspace}/customers/{customer}', [CustomerController::class, 'update'])->scopeBindings();
+    Route::delete('/workspaces/{workspace}/customers/{customer}', [CustomerController::class, 'destroy'])->scopeBindings();
+    Route::get('/workspaces/{workspace}/customers/{customer}/deployments', [DeploymentController::class, 'index'])->scopeBindings();
+    Route::post('/workspaces/{workspace}/customers/{customer}/deployments', [DeploymentController::class, 'store'])->scopeBindings();
+    Route::get('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}', [DeploymentController::class, 'show'])->scopeBindings();
+    Route::patch('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}', [DeploymentController::class, 'update'])->scopeBindings();
+    Route::delete('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}', [DeploymentController::class, 'destroy'])->scopeBindings();
+    Route::patch('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/stage', [DeploymentController::class, 'updateStage'])->scopeBindings();
 });

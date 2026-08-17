@@ -3,6 +3,8 @@ import {
   clearToken,
   createWorkspace,
   fetchCurrentUser,
+  fetchCustomers,
+  fetchDeployments,
   fetchWorkspaceMembers,
   fetchWorkspaces,
   getToken,
@@ -11,7 +13,8 @@ import {
   register,
   setToken,
 } from './api'
-import type { User, Workspace, WorkspaceMember } from './types'
+import type { Customer, Deployment, User, Workspace, WorkspaceMember } from './types'
+import { DEPLOYMENT_STAGES } from './types'
 
 type HealthResponse = {
   status: string
@@ -31,6 +34,13 @@ function App() {
   const [members, setMembers] = useState<WorkspaceMember[]>([])
   const [membersError, setMembersError] = useState<string | null>(null)
   const [membersLoading, setMembersLoading] = useState(false)
+  const [customers, setCustomers] = useState<Customer[]>([])
+  const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null)
+  const [customersError, setCustomersError] = useState<string | null>(null)
+  const [customersLoading, setCustomersLoading] = useState(false)
+  const [deployments, setDeployments] = useState<Deployment[]>([])
+  const [deploymentsError, setDeploymentsError] = useState<string | null>(null)
+  const [deploymentsLoading, setDeploymentsLoading] = useState(false)
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -40,6 +50,11 @@ function App() {
   const [authError, setAuthError] = useState<string | null>(null)
   const [loadingUser, setLoadingUser] = useState(() => Boolean(getToken()))
   const selectedWorkspace = workspaces.find((workspace) => workspace.id === selectedWorkspaceId) ?? null
+  const selectedCustomer = customers.find((customer) => customer.id === selectedCustomerId) ?? null
+  const deploymentsByStage = DEPLOYMENT_STAGES.reduce<Record<string, Deployment[]>>((groups, stage) => {
+    groups[stage] = deployments.filter((deployment) => deployment.stage === stage)
+    return groups
+  }, {})
 
   useEffect(() => {
     fetch(`${import.meta.env.VITE_API_URL}/api/health/ai`)
@@ -109,11 +124,87 @@ function App() {
     }
   }, [user, selectedWorkspaceId])
 
+  useEffect(() => {
+    if (!user || selectedWorkspaceId === null) {
+      return
+    }
+
+    let cancelled = false
+
+    fetchCustomers(selectedWorkspaceId)
+      .then((response) => {
+        if (!cancelled) {
+          setCustomers(response.data)
+          setCustomersError(null)
+        }
+      })
+      .catch((error: Error) => {
+        if (!cancelled) {
+          setCustomers([])
+          setCustomersError(error.message)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setCustomersLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [user, selectedWorkspaceId])
+
+  useEffect(() => {
+    if (!user || selectedWorkspaceId === null || selectedCustomerId === null) {
+      return
+    }
+
+    let cancelled = false
+
+    fetchDeployments(selectedWorkspaceId, selectedCustomerId)
+      .then((response) => {
+        if (!cancelled) {
+          setDeployments(response.data)
+          setDeploymentsError(null)
+        }
+      })
+      .catch((error: Error) => {
+        if (!cancelled) {
+          setDeployments([])
+          setDeploymentsError(error.message)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setDeploymentsLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [user, selectedWorkspaceId, selectedCustomerId])
+
   function selectWorkspace(workspaceId: number) {
     setSelectedWorkspaceId(workspaceId)
+    setSelectedCustomerId(null)
     setMembers([])
     setMembersError(null)
     setMembersLoading(true)
+    setCustomers([])
+    setCustomersError(null)
+    setCustomersLoading(true)
+    setDeployments([])
+    setDeploymentsError(null)
+    setDeploymentsLoading(false)
+  }
+
+  function selectCustomer(customerId: number) {
+    setSelectedCustomerId(customerId)
+    setDeployments([])
+    setDeploymentsError(null)
+    setDeploymentsLoading(true)
   }
 
   async function handleAuth(event: FormEvent<HTMLFormElement>) {
@@ -146,9 +237,16 @@ function App() {
     setUser(null)
     setWorkspaces([])
     setSelectedWorkspaceId(null)
+    setSelectedCustomerId(null)
     setMembers([])
     setMembersError(null)
     setMembersLoading(false)
+    setCustomers([])
+    setCustomersError(null)
+    setCustomersLoading(false)
+    setDeployments([])
+    setDeploymentsError(null)
+    setDeploymentsLoading(false)
   }
 
   async function handleCreateWorkspace(event: FormEvent<HTMLFormElement>) {
@@ -316,6 +414,60 @@ function App() {
                     </li>
                   ))}
                 </ul>
+              )}
+
+              <h2>Customers — {selectedWorkspace.name}</h2>
+              {customersLoading && <p>Loading customers...</p>}
+              {customersError && <p>{customersError}</p>}
+              {!customersLoading && customers.length === 0 && !customersError && (
+                <p>No customers yet.</p>
+              )}
+              {!customersLoading && customers.length > 0 && (
+                <ul>
+                  {customers.map((customer) => (
+                    <li key={customer.id}>
+                      <button
+                        type="button"
+                        aria-pressed={customer.id === selectedCustomerId}
+                        onClick={() => selectCustomer(customer.id)}
+                      >
+                        {customer.name} ({customer.slug})
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {selectedCustomer && (
+                <section>
+                  <h2>Deployments — {selectedCustomer.name}</h2>
+                  {deploymentsLoading && <p>Loading deployments...</p>}
+                  {deploymentsError && <p>{deploymentsError}</p>}
+                  {!deploymentsLoading && deployments.length === 0 && !deploymentsError && (
+                    <p>No deployments yet.</p>
+                  )}
+                  {!deploymentsLoading && deployments.length > 0 && (
+                    <div>
+                      {DEPLOYMENT_STAGES.map((stage) => (
+                        <section key={stage}>
+                          <h3>{stage}</h3>
+                          {deploymentsByStage[stage]?.length ? (
+                            <ul>
+                              {deploymentsByStage[stage].map((deployment) => (
+                                <li key={deployment.id}>
+                                  {deployment.name}
+                                  {deployment.description ? ` — ${deployment.description}` : ''}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p>No deployments in this stage.</p>
+                          )}
+                        </section>
+                      ))}
+                    </div>
+                  )}
+                </section>
               )}
             </section>
           )}

@@ -18,4 +18,14 @@ enum WorkspaceRole: string
     {
         return $this !== self::Viewer;
     }
+
+    public function canManageCustomers(): bool
+    {
+        return $this === self::Owner || $this === self::Admin;
+    }
+
+    public function canManageDeployments(): bool
+    {
+        return $this->canOperate();
+    }
 }
