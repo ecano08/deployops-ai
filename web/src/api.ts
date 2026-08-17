@@ -1,5 +1,7 @@
 import type {
+  AiHealthSummaryResponse,
   AiProposedActionListResponse,
+  AiTraceListResponse,
   AuthResponse,
   CopilotResponse,
   CustomerListResponse,
@@ -7,6 +9,7 @@ import type {
   EvaluationDatasetListResponse,
   EvaluationRunListResponse,
   EvaluationRunResponse,
+  IncidentListResponse,
   IntegrationListResponse,
   IntegrationTestResponse,
   UserResponse,
@@ -218,5 +221,35 @@ export function rejectAiAction(
   return request<AiProposedActionListResponse>(
     `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/ai-actions/${actionId}/reject`,
     { method: 'POST' },
+  )
+}
+
+export function fetchAiHealth(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+) {
+  return request<AiHealthSummaryResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/ai-health`,
+  )
+}
+
+export function fetchAiTraces(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+) {
+  return request<AiTraceListResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/ai-traces`,
+  )
+}
+
+export function fetchIncidents(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+) {
+  return request<IncidentListResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/incidents`,
   )
 }

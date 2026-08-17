@@ -54,6 +54,20 @@ return [
         'timeout' => env('OPENAI_TIMEOUT', 30),
         'connect_timeout' => env('OPENAI_CONNECT_TIMEOUT', 5),
         'max_output_tokens' => env('OPENAI_MAX_OUTPUT_TOKENS', 800),
+        'pricing' => [
+            'gpt-4.1-mini' => [
+                'input' => 0.0004,
+                'output' => 0.0016,
+            ],
+            'gpt-4.1' => [
+                'input' => 0.002,
+                'output' => 0.008,
+            ],
+            'default' => [
+                'input' => 0.001,
+                'output' => 0.003,
+            ],
+        ],
     ],
 
 ];

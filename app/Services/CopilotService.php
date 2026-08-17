@@ -15,6 +15,8 @@ class CopilotService
         private OpenAIResponsesClient $openAI,
         private CopilotToolExecutor $toolExecutor,
         private CopilotQuestionRedactor $questionRedactor,
+        private OpenAICostEstimator $costEstimator,
+        private IncidentService $incidentService,
     ) {}
 
     /**
@@ -53,6 +55,7 @@ class CopilotService
         $toolsUsed = [];
         $sourcesUsed = [];
         $model = (string) config('services.openai.model');
+        $traceRecorder = new AiTraceRecorder;
 
         try {
             $instructions = $this->instructions($context);
@@ -62,6 +65,7 @@ class CopilotService
 
             for ($round = 0; $round < self::MAX_TOOL_ROUNDS; $round++) {
                 $response = $this->openAI->create($instructions, $input, $tools, $previousResponseId);
+                $traceRecorder->addUsage($response);
                 $previousResponseId = $this->openAI->responseId($response);
 
                 $functionCalls = $this->openAI->extractFunctionCalls($response);
@@ -76,7 +80,7 @@ class CopilotService
                     $latencyMs = $this->latencyMs($startedAt);
 
                     if ($persistLog) {
-                        $this->logRequest($context, $question, $model, $toolsUsed, $startedAt, 'success', null);
+                        $this->logRequest($context, $question, $model, $toolsUsed, $startedAt, 'success', null, $traceRecorder);
                     }
 
                     return [
@@ -93,6 +97,7 @@ class CopilotService
 
                 foreach ($functionCalls as $call) {
                     $toolsUsed[] = $call['name'];
+                    $toolStartedAt = hrtime(true);
 
                     try {
                         $arguments = json_decode($call['arguments'], true, 512, JSON_THROW_ON_ERROR);
@@ -106,10 +111,20 @@ class CopilotService
 
                     try {
                         $result = $this->toolExecutor->validateAndExecute($context, $call['name'], $arguments);
+                        $toolStatus = isset($result['error']) ? 'failure' : 'success';
                     } catch (AuthorizationException $exception) {
                         $result = [
                             'error' => $exception->getMessage() ?: 'Not authorized to access this resource.',
                         ];
+                        $toolStatus = 'failure';
+                    }
+
+                    $toolDurationMs = (int) round((hrtime(true) - $toolStartedAt) / 1_000_000);
+                    $toolMetadata = $this->toolMetadata($call['name'], $result);
+                    $traceRecorder->recordToolCall($call['name'], $toolDurationMs, $toolStatus, $toolMetadata);
+
+                    if ($call['name'] === 'search_knowledge' && isset($result['results']) && is_array($result['results'])) {
+                        $traceRecorder->recordRagUsage(count($result['results']));
                     }
 
                     $sourcesUsed = array_merge($sourcesUsed, $this->extractSourcesFromToolResult($call['name'], $result));
@@ -127,7 +142,17 @@ class CopilotService
             throw new CopilotException('The copilot exceeded the maximum number of tool calls.', 502);
         } catch (CopilotException $exception) {
             if ($persistLog) {
-                $this->logRequest($context, $question, $model, $toolsUsed, $startedAt, 'failure', $exception->getMessage());
+                $trace = $this->logRequest(
+                    $context,
+                    $question,
+                    $model,
+                    $toolsUsed,
+                    $startedAt,
+                    'failure',
+                    $exception->getMessage(),
+                    $traceRecorder,
+                );
+                $this->incidentService->createFromAiFailure($trace, $exception->getMessage());
             }
 
             return [
@@ -140,7 +165,17 @@ class CopilotService
             ];
         } catch (\Throwable $exception) {
             if ($persistLog) {
-                $this->logRequest($context, $question, $model, $toolsUsed, $startedAt, 'failure', 'An unexpected copilot error occurred.');
+                $trace = $this->logRequest(
+                    $context,
+                    $question,
+                    $model,
+                    $toolsUsed,
+                    $startedAt,
+                    'failure',
+                    'An unexpected copilot error occurred.',
+                    $traceRecorder,
+                );
+                $this->incidentService->createFromAiFailure($trace, 'An unexpected copilot error occurred.');
             }
 
             return [
@@ -163,6 +198,7 @@ class CopilotService
             'For questions about uploaded documentation, runbooks, or guides, call search_knowledge first. '.
             'Only cite knowledge that appears in search_knowledge results and include source filenames. '.
             'If search_knowledge returns no relevant results, say you do not have that information in the knowledge base. '.
+            'For operational health, incidents, or AI reliability questions, use get_ai_health_summary, list_recent_incidents, or get_incident. '.
             'Never invent deployment, customer, integration, or documentation details. '.
             'Only reference integration IDs returned by list_deployment_integrations. '.
             'To change deployment stage, use propose_update_deployment_stage which creates a pending action for human approval. '.
@@ -195,6 +231,33 @@ class CopilotService
         return $sources;
     }
 
+    /**
+     * @param  array<string, mixed>  $result
+     * @return array<string, mixed>
+     */
+    private function toolMetadata(string $toolName, array $result): array
+    {
+        if (isset($result['error'])) {
+            return [
+                'tool' => $toolName,
+                'error' => is_string($result['error']) ? $result['error'] : 'Tool failed.',
+            ];
+        }
+
+        return match ($toolName) {
+            'search_knowledge' => [
+                'result_count' => is_array($result['results'] ?? null) ? count($result['results']) : 0,
+            ],
+            'list_recent_incidents' => [
+                'incident_count' => is_array($result['incidents'] ?? null) ? count($result['incidents']) : 0,
+            ],
+            'get_incident' => [
+                'incident_id' => $result['id'] ?? null,
+            ],
+            default => ['tool' => $toolName],
+        };
+    }
+
     private function latencyMs(int $startedAt): int
     {
         return (int) round((hrtime(true) - $startedAt) / 1_000_000);
@@ -211,20 +274,18 @@ class CopilotService
         int $startedAt,
         string $status,
         ?string $errorMessage,
-    ): void {
-        $latencyMs = (int) round((hrtime(true) - $startedAt) / 1_000_000);
-
-        CopilotRequestLog::query()->create([
-            'workspace_id' => $context->workspace->id,
-            'user_id' => $context->user->id,
-            'customer_id' => $context->customer->id,
-            'deployment_id' => $context->deployment->id,
-            'model' => $model,
-            'question' => $this->questionRedactor->redact($question),
-            'tool_names' => array_values(array_unique($toolsUsed)),
-            'latency_ms' => $latencyMs,
-            'status' => $status,
-            'error_message' => $errorMessage,
-        ]);
+        AiTraceRecorder $traceRecorder,
+    ): CopilotRequestLog {
+        return $traceRecorder->persist(
+            $context,
+            $question,
+            $model,
+            $toolsUsed,
+            $startedAt,
+            $status,
+            $errorMessage,
+            $this->questionRedactor,
+            $this->costEstimator,
+        );
     }
 }

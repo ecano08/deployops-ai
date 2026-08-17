@@ -4,11 +4,14 @@ import {
   askCopilot,
   clearToken,
   createWorkspace,
+  fetchAiHealth,
+  fetchAiTraces,
   fetchCurrentUser,
   fetchCustomers,
   fetchDeployments,
   fetchEvaluationDatasets,
   fetchEvaluationRuns,
+  fetchIncidents,
   fetchIntegrations,
   fetchPendingAiActions,
   fetchWorkspaceMembers,
@@ -23,11 +26,14 @@ import {
   setToken,
 } from './api'
 import type {
+  AiHealthSummary,
   AiProposedAction,
+  AiTrace,
   Customer,
   Deployment,
   DeploymentIntegration,
   EvaluationRun,
+  Incident,
   User,
   Workspace,
   WorkspaceMember,
@@ -78,6 +84,15 @@ function App() {
   const [pendingAiActionsError, setPendingAiActionsError] = useState<string | null>(null)
   const [pendingAiActionsLoading, setPendingAiActionsLoading] = useState(false)
   const [aiActionMessage, setAiActionMessage] = useState<string | null>(null)
+  const [aiHealth, setAiHealth] = useState<AiHealthSummary | null>(null)
+  const [aiHealthError, setAiHealthError] = useState<string | null>(null)
+  const [aiHealthLoading, setAiHealthLoading] = useState(false)
+  const [aiTraces, setAiTraces] = useState<AiTrace[]>([])
+  const [aiTracesError, setAiTracesError] = useState<string | null>(null)
+  const [aiTracesLoading, setAiTracesLoading] = useState(false)
+  const [incidents, setIncidents] = useState<Incident[]>([])
+  const [incidentsError, setIncidentsError] = useState<string | null>(null)
+  const [incidentsLoading, setIncidentsLoading] = useState(false)
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -296,6 +311,51 @@ function App() {
     }
   }, [user, selectedWorkspaceId, selectedCustomerId, selectedDeploymentId])
 
+  useEffect(() => {
+    if (!user || selectedWorkspaceId === null || selectedCustomerId === null || selectedDeploymentId === null) {
+      return
+    }
+
+    let cancelled = false
+
+    Promise.all([
+      fetchAiHealth(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId),
+      fetchAiTraces(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId),
+      fetchIncidents(selectedWorkspaceId, selectedCustomerId, selectedDeploymentId),
+    ])
+      .then(([healthResponse, tracesResponse, incidentsResponse]) => {
+        if (!cancelled) {
+          setAiHealth(healthResponse.data)
+          setAiHealthError(null)
+          setAiTraces(tracesResponse.data)
+          setAiTracesError(null)
+          setIncidents(incidentsResponse.data)
+          setIncidentsError(null)
+        }
+      })
+      .catch((error: Error) => {
+        if (!cancelled) {
+          setAiHealth(null)
+          setAiHealthError(error.message)
+          setAiTraces([])
+          setAiTracesError(error.message)
+          setIncidents([])
+          setIncidentsError(error.message)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setAiHealthLoading(false)
+          setAiTracesLoading(false)
+          setIncidentsLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [user, selectedWorkspaceId, selectedCustomerId, selectedDeploymentId])
+
   function selectWorkspace(workspaceId: number) {
     setSelectedWorkspaceId(workspaceId)
     setSelectedCustomerId(null)
@@ -327,6 +387,15 @@ function App() {
     setPendingAiActionsError(null)
     setPendingAiActionsLoading(false)
     setAiActionMessage(null)
+    setAiHealth(null)
+    setAiHealthError(null)
+    setAiHealthLoading(false)
+    setAiTraces([])
+    setAiTracesError(null)
+    setAiTracesLoading(false)
+    setIncidents([])
+    setIncidentsError(null)
+    setIncidentsLoading(false)
   }
 
   function selectCustomer(customerId: number) {
@@ -353,6 +422,15 @@ function App() {
     setPendingAiActionsError(null)
     setPendingAiActionsLoading(false)
     setAiActionMessage(null)
+    setAiHealth(null)
+    setAiHealthError(null)
+    setAiHealthLoading(false)
+    setAiTraces([])
+    setAiTracesError(null)
+    setAiTracesLoading(false)
+    setIncidents([])
+    setIncidentsError(null)
+    setIncidentsLoading(false)
   }
 
   function selectDeployment(deploymentId: number) {
@@ -375,6 +453,15 @@ function App() {
     setPendingAiActionsError(null)
     setPendingAiActionsLoading(true)
     setAiActionMessage(null)
+    setAiHealth(null)
+    setAiHealthError(null)
+    setAiHealthLoading(true)
+    setAiTraces([])
+    setAiTracesError(null)
+    setAiTracesLoading(true)
+    setIncidents([])
+    setIncidentsError(null)
+    setIncidentsLoading(true)
   }
 
   async function handleRunEvaluation() {
@@ -822,6 +909,72 @@ function App() {
                           ))}
                         </ul>
                       )}
+
+                      <section>
+                        <h3>AI Observability — {selectedDeployment.name}</h3>
+                        {(aiHealthLoading || aiTracesLoading || incidentsLoading) && (
+                          <p>Loading observability data...</p>
+                        )}
+                        {aiHealthError && <p>{aiHealthError}</p>}
+                        {aiHealth && (
+                          <div>
+                            <h4>Health metrics (7 days)</h4>
+                            <ul>
+                              <li>Requests: {aiHealth.request_count}</li>
+                              <li>
+                                Failure rate: {Math.round(aiHealth.failure_rate * 100)}% (
+                                {aiHealth.failure_count} failures)
+                              </li>
+                              <li>Average latency: {aiHealth.average_latency_ms}ms</li>
+                              <li>
+                                Tokens: {aiHealth.total_input_tokens} in /{' '}
+                                {aiHealth.total_output_tokens} out
+                              </li>
+                              <li>Estimated cost: ${aiHealth.estimated_cost_usd.toFixed(6)}</li>
+                              <li>Tool failures: {aiHealth.tool_failure_count}</li>
+                              <li>RAG requests: {aiHealth.rag_request_count}</li>
+                            </ul>
+                          </div>
+                        )}
+                        {aiTracesError && <p>{aiTracesError}</p>}
+                        {!aiTracesLoading && aiTraces.length > 0 && (
+                          <div>
+                            <h4>Recent traces</h4>
+                            <ul>
+                              {aiTraces.slice(0, 5).map((trace) => (
+                                <li key={trace.id}>
+                                  #{trace.id} — {trace.status} — {trace.latency_ms}ms —{' '}
+                                  {trace.model}
+                                  {trace.tool_names.length > 0
+                                    ? ` — tools: ${trace.tool_names.join(', ')}`
+                                    : ''}
+                                  {trace.rag_used ? ' — RAG used' : ''}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {!aiTracesLoading && aiTraces.length === 0 && !aiTracesError && (
+                          <p>No copilot traces yet.</p>
+                        )}
+                        {incidentsError && <p>{incidentsError}</p>}
+                        {!incidentsLoading && incidents.length > 0 && (
+                          <div>
+                            <h4>Incidents</h4>
+                            <ul>
+                              {incidents.slice(0, 5).map((incident) => (
+                                <li key={incident.id}>
+                                  #{incident.id} — {incident.severity} / {incident.status} —{' '}
+                                  {incident.title} ({incident.source})
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {!incidentsLoading && incidents.length === 0 && !incidentsError && (
+                          <p>No incidents recorded.</p>
+                        )}
+                      </section>
 
                       <section>
                         <h3>AI Copilot — {selectedDeployment.name}</h3>

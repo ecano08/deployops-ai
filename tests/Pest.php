@@ -100,6 +100,21 @@ function aiActionsPath(Workspace $workspace, Customer $customer, Deployment $dep
     return '/api/workspaces/'.$workspace->id.'/customers/'.$customer->id.'/deployments/'.$deployment->id.'/ai-actions';
 }
 
+function aiHealthPath(Workspace $workspace, Customer $customer, Deployment $deployment): string
+{
+    return '/api/workspaces/'.$workspace->id.'/customers/'.$customer->id.'/deployments/'.$deployment->id.'/ai-health';
+}
+
+function aiTracesPath(Workspace $workspace, Customer $customer, Deployment $deployment): string
+{
+    return '/api/workspaces/'.$workspace->id.'/customers/'.$customer->id.'/deployments/'.$deployment->id.'/ai-traces';
+}
+
+function incidentsPath(Workspace $workspace, Customer $customer, Deployment $deployment): string
+{
+    return '/api/workspaces/'.$workspace->id.'/customers/'.$customer->id.'/deployments/'.$deployment->id.'/incidents';
+}
+
 function openAiToolCallResponse(string $name, string $arguments = '{}', string $responseId = 'resp_tool'): array
 {
     return [

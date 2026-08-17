@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'workspace_id',
@@ -14,6 +15,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'model',
     'question',
     'tool_names',
+    'input_tokens',
+    'output_tokens',
+    'rag_used',
+    'rag_result_count',
+    'estimated_cost_usd',
     'latency_ms',
     'status',
     'error_message',
@@ -27,6 +33,8 @@ class CopilotRequestLog extends Model
     {
         return [
             'tool_names' => 'array',
+            'rag_used' => 'boolean',
+            'estimated_cost_usd' => 'decimal:6',
         ];
     }
 
@@ -60,5 +68,13 @@ class CopilotRequestLog extends Model
     public function deployment(): BelongsTo
     {
         return $this->belongsTo(Deployment::class);
+    }
+
+    /**
+     * @return HasMany<AiToolCallTrace, $this>
+     */
+    public function toolCallTraces(): HasMany
+    {
+        return $this->hasMany(AiToolCallTrace::class);
     }
 }

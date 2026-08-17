@@ -9,7 +9,9 @@ use App\Http\Resources\DeploymentIntegrationResource;
 use App\Http\Resources\DeploymentResource;
 use App\Http\Resources\IntegrationActivityResource;
 use App\Models\AiProposedAction;
+use App\Models\CopilotRequestLog;
 use App\Models\DeploymentIntegration;
+use App\Models\Incident;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\Gate;
 
@@ -18,6 +20,7 @@ class CopilotToolExecutor
     public function __construct(
         private KnowledgeSearchService $knowledgeSearch,
         private AiActionService $aiActionService,
+        private AiHealthMetricsService $aiHealthMetrics,
     ) {}
 
     /**
@@ -48,6 +51,15 @@ class CopilotToolExecutor
             ),
             $this->searchKnowledgeTool(),
             $this->proposeUpdateDeploymentStageTool(),
+            $this->noArgumentTool(
+                'list_recent_incidents',
+                'List recent incidents for the current deployment.',
+            ),
+            $this->incidentIdTool(),
+            $this->noArgumentTool(
+                'get_ai_health_summary',
+                'Get AI health metrics for the current deployment including request count, failure rate, latency, token usage, and estimated cost.',
+            ),
         ];
     }
 
@@ -71,10 +83,11 @@ class CopilotToolExecutor
     public function validateArguments(string $name, array $arguments): ?array
     {
         $allowedKeys = match ($name) {
-            'get_customer', 'get_deployment', 'list_deployment_integrations' => [],
+            'get_customer', 'get_deployment', 'list_deployment_integrations', 'list_recent_incidents', 'get_ai_health_summary' => [],
             'get_integration_status', 'list_integration_activities' => ['integration_id'],
             'search_knowledge' => ['query', 'top_k'],
             'propose_update_deployment_stage' => ['stage'],
+            'get_incident' => ['incident_id'],
             default => null,
         };
 
@@ -102,6 +115,10 @@ class CopilotToolExecutor
 
         if ($name === 'propose_update_deployment_stage') {
             return $this->validateProposeUpdateDeploymentStageArguments($arguments);
+        }
+
+        if ($name === 'get_incident') {
+            return $this->validateIncidentIdArguments($arguments);
         }
 
         if (! array_key_exists('integration_id', $arguments)) {
@@ -230,6 +247,9 @@ class CopilotToolExecutor
             'list_integration_activities' => $this->listIntegrationActivities($context, $arguments),
             'search_knowledge' => $this->searchKnowledge($context, $arguments),
             'propose_update_deployment_stage' => $this->proposeUpdateDeploymentStage($context, $arguments),
+            'list_recent_incidents' => $this->listRecentIncidents($context),
+            'get_incident' => $this->getIncident($context, $arguments),
+            'get_ai_health_summary' => $this->getAiHealthSummary($context),
             default => [
                 'error' => 'Unknown tool.',
             ],
@@ -408,6 +428,139 @@ class CopilotToolExecutor
             'status' => $action->status->value,
             'message' => 'Deployment stage change proposed and pending approval.',
         ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function incidentIdTool(): array
+    {
+        return [
+            'type' => 'function',
+            'name' => 'get_incident',
+            'description' => 'Get details for a specific incident in the current deployment.',
+            'strict' => true,
+            'parameters' => [
+                'type' => 'object',
+                'properties' => [
+                    'incident_id' => [
+                        'type' => 'integer',
+                        'description' => 'Incident ID from list_recent_incidents.',
+                    ],
+                ],
+                'required' => ['incident_id'],
+                'additionalProperties' => false,
+            ],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $arguments
+     * @return array<string, mixed>|null
+     */
+    private function validateIncidentIdArguments(array $arguments): ?array
+    {
+        if (! array_key_exists('incident_id', $arguments)) {
+            return ['error' => 'Missing required tool argument.'];
+        }
+
+        $incidentId = $arguments['incident_id'];
+
+        if (! is_int($incidentId)) {
+            if (is_string($incidentId) && ctype_digit($incidentId)) {
+                return null;
+            }
+
+            return ['error' => 'Invalid incident identifier.'];
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function listRecentIncidents(CopilotContext $context): array
+    {
+        Gate::forUser($context->user)->authorize('viewAny', [Incident::class, $context->deployment]);
+
+        $incidents = $context->deployment->incidents()
+            ->where('workspace_id', $context->workspace->id)
+            ->orderByDesc('created_at')
+            ->limit(10)
+            ->get();
+
+        return [
+            'incidents' => $incidents->map(static fn (Incident $incident): array => [
+                'id' => $incident->id,
+                'title' => $incident->title,
+                'severity' => $incident->severity->value,
+                'status' => $incident->status->value,
+                'source' => $incident->source->value,
+                'created_at' => $incident->created_at?->toIso8601String(),
+            ])->all(),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $arguments
+     * @return array<string, mixed>
+     */
+    private function getIncident(CopilotContext $context, array $arguments): array
+    {
+        $incident = $this->resolveIncident($context, $arguments);
+
+        Gate::forUser($context->user)->authorize('view', $incident);
+
+        return [
+            'id' => $incident->id,
+            'title' => $incident->title,
+            'description' => $incident->description,
+            'severity' => $incident->severity->value,
+            'status' => $incident->status->value,
+            'source' => $incident->source->value,
+            'root_cause' => $incident->root_cause,
+            'resolution' => $incident->resolution,
+            'created_at' => $incident->created_at?->toIso8601String(),
+            'resolved_at' => $incident->resolved_at?->toIso8601String(),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function getAiHealthSummary(CopilotContext $context): array
+    {
+        Gate::forUser($context->user)->authorize('viewAny', [CopilotRequestLog::class, $context->deployment]);
+
+        return $this->aiHealthMetrics->summarize($context->deployment);
+    }
+
+    /**
+     * @param  array<string, mixed>  $arguments
+     */
+    private function resolveIncident(CopilotContext $context, array $arguments): Incident
+    {
+        $incidentId = $arguments['incident_id'];
+
+        if (! is_int($incidentId)) {
+            if (is_string($incidentId) && ctype_digit($incidentId)) {
+                $incidentId = (int) $incidentId;
+            } else {
+                throw new AuthorizationException('Invalid incident identifier.');
+            }
+        }
+
+        $incident = $context->deployment->incidents()
+            ->whereKey($incidentId)
+            ->where('workspace_id', $context->workspace->id)
+            ->first();
+
+        if ($incident === null) {
+            throw new AuthorizationException('Incident not found in this deployment.');
+        }
+
+        return $incident;
     }
 
     /**

@@ -194,6 +194,84 @@ export type EvaluationRunResponse = {
   data: EvaluationRun
 }
 
+export type AiHealthSummary = {
+  request_count: number
+  failure_count: number
+  failure_rate: number
+  average_latency_ms: number
+  total_input_tokens: number
+  total_output_tokens: number
+  estimated_cost_usd: number
+  tool_failure_count: number
+  rag_request_count: number
+}
+
+export type AiToolCallTrace = {
+  id: number
+  tool_name: string
+  duration_ms: number
+  status: string
+  metadata: Record<string, unknown>
+  created_at: string
+}
+
+export type AiTrace = {
+  id: number
+  workspace_id: number
+  customer_id: number
+  deployment_id: number
+  user_id: number
+  model: string
+  question_preview: string
+  tool_names: string[]
+  input_tokens: number | null
+  output_tokens: number | null
+  rag_used: boolean
+  rag_result_count: number
+  estimated_cost_usd: string | number | null
+  latency_ms: number
+  status: string
+  error_message: string | null
+  tool_call_traces?: AiToolCallTrace[]
+  created_at: string
+}
+
+export type IncidentSeverity = 'low' | 'medium' | 'high' | 'critical'
+export type IncidentStatus = 'open' | 'investigating' | 'resolved'
+export type IncidentSource = 'ai_failure' | 'integration_failure' | 'manual'
+
+export type Incident = {
+  id: number
+  workspace_id: number
+  customer_id: number
+  deployment_id: number
+  deployment_integration_id: number | null
+  created_by: number | null
+  severity: IncidentSeverity
+  status: IncidentStatus
+  source: IncidentSource
+  source_reference: string | null
+  title: string
+  description: string
+  root_cause: string | null
+  resolution: string | null
+  resolved_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type AiHealthSummaryResponse = {
+  data: AiHealthSummary
+}
+
+export type AiTraceListResponse = {
+  data: AiTrace[]
+}
+
+export type IncidentListResponse = {
+  data: Incident[]
+}
+
 export type AiProposedActionListResponse = {
   data: AiProposedAction[]
 }
