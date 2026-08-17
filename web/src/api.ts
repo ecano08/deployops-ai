@@ -1,5 +1,6 @@
 import type {
   AuthResponse,
+  CopilotResponse,
   CustomerListResponse,
   DeploymentListResponse,
   IntegrationListResponse,
@@ -132,5 +133,20 @@ export function testIntegration(
   return request<IntegrationTestResponse>(
     `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/integrations/${integrationId}/test`,
     { method: 'POST' },
+  )
+}
+
+export function askCopilot(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+  message: string,
+) {
+  return request<CopilotResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/copilot`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    },
   )
 }

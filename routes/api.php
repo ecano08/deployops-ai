@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\CopilotController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DeploymentController;
 use App\Http\Controllers\DeploymentIntegrationController;
@@ -83,4 +84,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/integrations/{deployment_integration}', [DeploymentIntegrationController::class, 'destroy'])->scopeBindings();
     Route::post('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/integrations/{deployment_integration}/test', [DeploymentIntegrationController::class, 'test'])->scopeBindings();
     Route::get('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/integrations/{deployment_integration}/activities', [IntegrationActivityController::class, 'index'])->scopeBindings();
+    Route::post('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/copilot', [CopilotController::class, 'store'])
+        ->middleware('throttle:copilot')
+        ->scopeBindings();
 });
