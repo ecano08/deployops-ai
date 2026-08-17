@@ -1,4 +1,10 @@
-import type { AuthResponse, UserResponse, WorkspaceListResponse, WorkspaceResponse } from './types'
+import type {
+  AuthResponse,
+  UserResponse,
+  WorkspaceListResponse,
+  WorkspaceMemberListResponse,
+  WorkspaceResponse,
+} from './types'
 
 const TOKEN_KEY = 'deployops_token'
 
@@ -87,4 +93,8 @@ export function createWorkspace(name: string) {
     method: 'POST',
     body: JSON.stringify({ name }),
   })
+}
+
+export function fetchWorkspaceMembers(workspaceId: number) {
+  return request<WorkspaceMemberListResponse>(`/api/workspaces/${workspaceId}/members`)
 }

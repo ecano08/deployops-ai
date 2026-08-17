@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\WorkspaceRole;
 use App\Http\Requests\StoreWorkspaceRequest;
 use App\Http\Resources\WorkspaceResource;
 use App\Models\Workspace;
@@ -33,7 +34,9 @@ class WorkspaceController extends Controller
                 'owner_id' => $request->user()->id,
             ]);
 
-            $workspace->members()->attach($request->user());
+            $workspace->members()->attach($request->user()->id, [
+                'role' => WorkspaceRole::Owner->value,
+            ]);
 
             return $workspace;
         });

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\WorkspaceController;
+use App\Http\Controllers\WorkspaceMemberController;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Route;
@@ -52,4 +53,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/workspaces', [WorkspaceController::class, 'index']);
     Route::post('/workspaces', [WorkspaceController::class, 'store']);
     Route::get('/workspaces/{workspace}', [WorkspaceController::class, 'show']);
+    Route::get('/workspaces/{workspace}/members', [WorkspaceMemberController::class, 'index']);
+    Route::post('/workspaces/{workspace}/members', [WorkspaceMemberController::class, 'store']);
+    Route::patch('/workspaces/{workspace}/members/{member}', [WorkspaceMemberController::class, 'update'])->scopeBindings();
+    Route::delete('/workspaces/{workspace}/members/{member}', [WorkspaceMemberController::class, 'destroy'])->scopeBindings();
 });

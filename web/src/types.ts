@@ -1,7 +1,13 @@
+export type WorkspaceRole = 'owner' | 'admin' | 'engineer' | 'viewer'
+
 export type User = {
   id: number
   name: string
   email: string
+}
+
+export type WorkspaceMember = User & {
+  role: WorkspaceRole
 }
 
 export type Workspace = {
@@ -10,6 +16,7 @@ export type Workspace = {
   slug: string
   owner_id: number
   owner?: User
+  current_user_role?: WorkspaceRole | null
 }
 
 export type AuthResponse = {
@@ -27,4 +34,8 @@ export type WorkspaceListResponse = {
 
 export type WorkspaceResponse = {
   data: Workspace
+}
+
+export type WorkspaceMemberListResponse = {
+  data: WorkspaceMember[]
 }
