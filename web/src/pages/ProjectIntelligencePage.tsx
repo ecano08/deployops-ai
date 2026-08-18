@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
-import { Brain, Check, Eye, Layers, Plus, Sparkles, X } from 'lucide-react'
+import { Brain, Check, Eye, Layers, Plus, Search, Sparkles, X } from 'lucide-react'
 import {
+  buildGroundedContext,
   bulkRejectProjectFacts,
   bulkVerifyProjectFacts,
   createProjectFact,
@@ -25,6 +26,8 @@ import { canManageDeployments } from '../lib/permissions'
 import type {
   Customer,
   Deployment,
+  GroundedContextKind,
+  GroundedContextPackage,
   KnowledgeDocumentLibraryEntry,
   ProjectFact,
   ProjectFactExtraction,
@@ -92,6 +95,42 @@ function factStatusVariant(status: ProjectFactStatus): 'default' | 'success' | '
 
 function formatFactStatus(status: ProjectFactStatus): string {
   return status.charAt(0).toUpperCase() + status.slice(1)
+}
+
+function groundingVariant(
+  grounding: GroundedContextKind,
+): 'default' | 'success' | 'warning' | 'danger' | 'neutral' | 'info' {
+  switch (grounding) {
+    case 'verified_fact':
+      return 'success'
+    case 'documented':
+      return 'info'
+    case 'inferred':
+      return 'warning'
+    case 'conflicting':
+      return 'danger'
+    case 'unknown':
+      return 'neutral'
+    default:
+      return 'default'
+  }
+}
+
+function formatGrounding(grounding: GroundedContextKind): string {
+  switch (grounding) {
+    case 'verified_fact':
+      return 'Verified fact'
+    case 'documented':
+      return 'Documented'
+    case 'inferred':
+      return 'Inferred'
+    case 'conflicting':
+      return 'Conflicting'
+    case 'unknown':
+      return 'Unknown'
+    default:
+      return grounding
+  }
 }
 
 function isExtractionInFlight(status: ProjectFactExtractionStatus): boolean {
@@ -182,6 +221,11 @@ export function ProjectIntelligencePage({
     source_reference: '',
     confidence: '',
   })
+  const contextQueryId = useId()
+  const [contextQuery, setContextQuery] = useState('How should cart reservation expiration work?')
+  const [contextPackage, setContextPackage] = useState<GroundedContextPackage | null>(null)
+  const [contextLoading, setContextLoading] = useState(false)
+  const [contextError, setContextError] = useState<string | null>(null)
 
   const canManage = canManageDeployments(workspace?.current_user_role)
   const hasActiveFilters =
@@ -213,6 +257,12 @@ export function ProjectIntelligencePage({
 
     return () => window.clearTimeout(timeoutId)
   }, [searchInput])
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- drop prior deployment context when scope changes
+    setContextPackage(null)
+    setContextError(null)
+  }, [workspace?.id, customer?.id, deployment?.id])
 
   useEffect(() => {
     if (!workspace || !customer || !deployment) {
@@ -589,6 +639,33 @@ export function ProjectIntelligencePage({
     }
   }
 
+  async function handleBuildContext() {
+    const query = contextQuery.trim()
+
+    if (query === '') {
+      setContextError('Enter a question to build grounded context.')
+      return
+    }
+
+    setContextLoading(true)
+    setContextError(null)
+
+    try {
+      const response = await buildGroundedContext(
+        activeWorkspace.id,
+        activeCustomer.id,
+        activeDeployment.id,
+        query,
+      )
+      setContextPackage(response.data)
+    } catch (buildError) {
+      setContextPackage(null)
+      setContextError(buildError instanceof Error ? buildError.message : 'Failed to build grounded context.')
+    } finally {
+      setContextLoading(false)
+    }
+  }
+
   async function handleExtractFacts() {
     if (extractDocumentId === '') {
       return
@@ -686,6 +763,198 @@ export function ProjectIntelligencePage({
           </Card>
         </div>
       )}
+
+      <Card
+        title="Build context"
+        description="Combine verified project facts with active, ready documentation. This debug view does not generate prompts or start engineering workflows."
+      >
+        <div className="form-panel">
+          <FormField
+            label="Question"
+            htmlFor={contextQueryId}
+            hint="Ask how a behavior should work. Only verified facts and active + ready documents are used."
+          >
+            <FormTextarea
+              id={contextQueryId}
+              value={contextQuery}
+              onChange={(event) => setContextQuery(event.target.value)}
+              placeholder="How should cart reservation expiration work?"
+              rows={3}
+            />
+          </FormField>
+          <div className="button-row">
+            <Button
+              variant="primary"
+              size="sm"
+              loading={contextLoading}
+              disabled={contextLoading}
+              onClick={() => void handleBuildContext()}
+            >
+              <Icon icon={Search} size="xs" />
+              Build context
+            </Button>
+          </div>
+        </div>
+
+        {contextError && <ErrorState message={contextError} />}
+        {contextLoading && <LoadingState label="Building grounded context…" />}
+
+        {!contextLoading && !contextError && contextPackage === null && (
+          <EmptyState
+            compact
+            title="No context package yet"
+            description="Enter a question and build context to inspect relevant facts, document evidence, conflicts, unknowns, and sources."
+            icon={Search}
+          />
+        )}
+
+        {!contextLoading && contextPackage !== null && (
+          <div className="context-package">
+            <section className="context-package__section">
+              <h3 className="context-package__title">Relevant verified facts</h3>
+              {contextPackage.facts.length === 0 ? (
+                <p className="context-package__empty">No verified facts matched this question.</p>
+              ) : (
+                <ul className="data-list">
+                  {contextPackage.facts.map((fact) => (
+                    <li key={fact.id} className="data-list__item data-list__item--stacked">
+                      <div className="data-list__primary">
+                        <div className="data-list__title-row">
+                          <strong>
+                            {fact.category}.{fact.key}
+                          </strong>
+                          <Badge variant={groundingVariant(fact.grounding)}>
+                            {formatGrounding(fact.grounding)}
+                          </Badge>
+                        </div>
+                        <p className="data-list__subtitle">{fact.value}</p>
+                        <span className="data-list__meta">
+                          Relevance {Math.round(fact.relevance * 100)}%
+                          {fact.provenance.source_document
+                            ? ` · ${fact.provenance.source_document.title} (rev ${fact.provenance.source_document.revision_number})`
+                            : ''}
+                        </span>
+                        {fact.provenance.source_reference && (
+                          <span className="data-list__meta data-list__meta--quote">
+                            “{fact.provenance.source_reference}”
+                          </span>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <section className="context-package__section">
+              <h3 className="context-package__title">Relevant document evidence</h3>
+              {contextPackage.documents.length === 0 ? (
+                <p className="context-package__empty">No active, ready document chunks matched this question.</p>
+              ) : (
+                <ul className="data-list">
+                  {contextPackage.documents.map((document) => (
+                    <li
+                      key={`${document.document_id}:${document.chunk_index}`}
+                      className="data-list__item data-list__item--stacked"
+                    >
+                      <div className="data-list__primary">
+                        <div className="data-list__title-row">
+                          <strong>
+                            {document.title} · chunk {document.chunk_index}
+                          </strong>
+                          <Badge variant={groundingVariant(document.grounding)}>
+                            {formatGrounding(document.grounding)}
+                          </Badge>
+                        </div>
+                        <p className="data-list__subtitle">{document.content}</p>
+                        <span className="data-list__meta">
+                          Score {document.score.toFixed(2)} · rev {document.revision_number} ·{' '}
+                          {document.source_filename}
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <section className="context-package__section">
+              <h3 className="context-package__title">Conflicts</h3>
+              {contextPackage.conflicts.length === 0 ? (
+                <p className="context-package__empty">No conflicts detected.</p>
+              ) : (
+                <ul className="data-list">
+                  {contextPackage.conflicts.map((conflict, index) => (
+                    <li key={`${conflict.topic}:${index}`} className="data-list__item data-list__item--stacked">
+                      <div className="data-list__primary">
+                        <div className="data-list__title-row">
+                          <strong>{conflict.topic}</strong>
+                          <Badge variant={groundingVariant(conflict.grounding)}>
+                            {formatGrounding(conflict.grounding)}
+                          </Badge>
+                        </div>
+                        <p className="data-list__subtitle">{conflict.summary}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <section className="context-package__section">
+              <h3 className="context-package__title">Unknowns</h3>
+              {contextPackage.unknowns.length === 0 ? (
+                <p className="context-package__empty">No uncovered topics.</p>
+              ) : (
+                <ul className="data-list">
+                  {contextPackage.unknowns.map((unknown) => (
+                    <li key={unknown.topic} className="data-list__item data-list__item--stacked">
+                      <div className="data-list__primary">
+                        <div className="data-list__title-row">
+                          <strong>{unknown.topic}</strong>
+                          <Badge variant={groundingVariant(unknown.grounding)}>
+                            {formatGrounding(unknown.grounding)}
+                          </Badge>
+                        </div>
+                        <p className="data-list__subtitle">{unknown.reason}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <section className="context-package__section">
+              <h3 className="context-package__title">Sources used</h3>
+              {contextPackage.sources.length === 0 ? (
+                <p className="context-package__empty">No sources were used.</p>
+              ) : (
+                <ul className="data-list">
+                  {contextPackage.sources.map((source) => (
+                    <li key={`${source.type}:${source.id}`} className="data-list__item data-list__item--stacked">
+                      <div className="data-list__primary">
+                        <div className="data-list__title-row">
+                          <strong>
+                            {source.type === 'project_fact' ? source.label : source.title}
+                          </strong>
+                          <Badge variant={source.type === 'project_fact' ? 'success' : 'info'}>
+                            {source.type === 'project_fact' ? 'Verified fact' : 'Document'}
+                          </Badge>
+                        </div>
+                        <span className="data-list__meta">
+                          {source.type === 'project_fact'
+                            ? `Fact #${source.id}${source.source_revision !== null ? ` · rev ${source.source_revision}` : ''}`
+                            : `${source.original_filename} · rev ${source.revision_number} · ${source.lifecycle_status}/${source.status}`}
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </div>
+        )}
+      </Card>
 
       <Card
         title="Project facts"

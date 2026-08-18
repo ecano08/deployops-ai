@@ -2162,6 +2162,31 @@ button {
   cursor: not-allowed;
 }
 
+.context-package {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.context-package__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.context-package__title {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.context-package__empty {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
 .page-grid {
   display: flex;
   flex-direction: column;

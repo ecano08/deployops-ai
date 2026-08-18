@@ -647,3 +647,102 @@ export type ProjectFactExtraction = {
 export type ProjectFactExtractionResponse = {
   data: ProjectFactExtraction
 }
+
+export type GroundedContextKind =
+  | 'documented'
+  | 'verified_fact'
+  | 'inferred'
+  | 'unknown'
+  | 'conflicting'
+
+export type GroundedContextFact = {
+  id: number
+  category: string
+  key: string
+  value: string
+  confidence: number | null
+  relevance: number
+  grounding: GroundedContextKind
+  provenance: {
+    type: 'project_fact'
+    fact_id: number
+    status: ProjectFactStatus
+    source_document_id: number | null
+    source_revision: number | null
+    source_reference: string | null
+    source_document: ProjectFactSourceDocument | null
+    verified_at: string | null
+  }
+}
+
+export type GroundedContextDocument = {
+  document_id: number
+  title: string
+  source_filename: string
+  revision_number: number
+  chunk_index: number
+  content: string
+  score: number
+  grounding: GroundedContextKind
+  provenance: {
+    type: 'knowledge_document'
+    document_id: number
+    title: string
+    original_filename: string
+    revision_number: number
+    chunk_index: number
+    lifecycle_status: string
+    status: string
+  }
+}
+
+export type GroundedContextConflictItem =
+  | { type: 'project_fact'; id: number; value: string }
+  | { type: 'knowledge_document'; document_id: number; chunk_index: number; excerpt: string }
+
+export type GroundedContextConflict = {
+  grounding: GroundedContextKind
+  topic: string
+  summary: string
+  fact_ids: number[]
+  document_ids: number[]
+  items: GroundedContextConflictItem[]
+}
+
+export type GroundedContextUnknown = {
+  grounding: GroundedContextKind
+  topic: string
+  reason: string
+}
+
+export type GroundedContextSource =
+  | {
+      type: 'project_fact'
+      id: number
+      label: string
+      status: ProjectFactStatus
+      source_document_id: number | null
+      source_revision: number | null
+    }
+  | {
+      type: 'knowledge_document'
+      id: number
+      title: string
+      revision_number: number
+      original_filename: string
+      lifecycle_status: string
+      status: string
+    }
+
+export type GroundedContextPackage = {
+  query: string
+  facts: GroundedContextFact[]
+  documents: GroundedContextDocument[]
+  conflicts: GroundedContextConflict[]
+  unknowns: GroundedContextUnknown[]
+  sources: GroundedContextSource[]
+}
+
+export type GroundedContextResponse = {
+  data: GroundedContextPackage
+}

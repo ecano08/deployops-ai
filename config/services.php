@@ -79,4 +79,14 @@ return [
         'extraction_timeout' => (int) env('PROJECT_FACT_EXTRACTION_TIMEOUT', 60),
     ],
 
+    'grounded_context' => [
+        'min_fact_score' => (float) env('GROUNDED_CONTEXT_MIN_FACT_SCORE', 0.2),
+        'strong_fact_score' => (float) env('GROUNDED_CONTEXT_STRONG_FACT_SCORE', 0.4),
+        'min_document_score' => (float) env('GROUNDED_CONTEXT_MIN_DOCUMENT_SCORE', 0.3),
+        'strong_document_score' => (float) env('GROUNDED_CONTEXT_STRONG_DOCUMENT_SCORE', 0.6),
+        'document_top_k' => (int) env('GROUNDED_CONTEXT_DOCUMENT_TOP_K', 10),
+        'max_facts' => (int) env('GROUNDED_CONTEXT_MAX_FACTS', 20),
+        'max_documents' => (int) env('GROUNDED_CONTEXT_MAX_DOCUMENTS', 10),
+    ],
+
 ];
