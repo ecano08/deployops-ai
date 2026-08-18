@@ -10,6 +10,7 @@ use App\Http\Controllers\DeploymentController;
 use App\Http\Controllers\DeploymentIntegrationController;
 use App\Http\Controllers\EvaluationDatasetController;
 use App\Http\Controllers\EvaluationRunController;
+use App\Http\Controllers\GroundedContextController;
 use App\Http\Controllers\IncidentController;
 use App\Http\Controllers\IntegrationActivityController;
 use App\Http\Controllers\IntegrationWebhookController;
@@ -127,6 +128,7 @@ Route::middleware(['auth:sanctum', 'throttle:api'])->group(function () {
     Route::patch('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/project-facts/{project_fact}', [ProjectFactController::class, 'update'])->scopeBindings();
     Route::post('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/project-facts/{project_fact}/verify', [ProjectFactController::class, 'verify'])->scopeBindings();
     Route::post('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/project-facts/{project_fact}/reject', [ProjectFactController::class, 'reject'])->scopeBindings();
+    Route::post('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/grounded-context', [GroundedContextController::class, 'store'])->scopeBindings();
     Route::get('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/evaluation-datasets', [EvaluationDatasetController::class, 'index'])->scopeBindings();
     Route::post('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/evaluation-datasets', [EvaluationDatasetController::class, 'store'])->scopeBindings();
     Route::get('/workspaces/{workspace}/customers/{customer}/deployments/{deployment}/evaluation-datasets/{evaluation_dataset}', [EvaluationDatasetController::class, 'show'])->scopeBindings();

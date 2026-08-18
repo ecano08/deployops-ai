@@ -16,6 +16,7 @@ import type {
   EvaluationCaseResponse,
   EvaluationRunListResponse,
   EvaluationRunResponse,
+  GroundedContextResponse,
   IncidentListResponse,
   IntegrationListResponse,
   IntegrationResponse,
@@ -923,5 +924,20 @@ export function fetchProjectFactExtraction(
 ) {
   return request<ProjectFactExtractionResponse>(
     `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/project-fact-extractions/${extractionId}`,
+  )
+}
+
+export function buildGroundedContext(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+  query: string,
+) {
+  return request<GroundedContextResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/grounded-context`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ query }),
+    },
   )
 }
