@@ -70,4 +70,13 @@ return [
         ],
     ],
 
+    'project_facts' => [
+        'extraction_chunk_batch_size' => (int) env('PROJECT_FACT_EXTRACTION_CHUNK_BATCH_SIZE', 4),
+        'extraction_max_batch_characters' => (int) env('PROJECT_FACT_EXTRACTION_MAX_BATCH_CHARACTERS', 6000),
+        'extraction_max_facts' => (int) env('PROJECT_FACT_EXTRACTION_MAX_FACTS', 40),
+        'extraction_min_confidence' => (float) env('PROJECT_FACT_EXTRACTION_MIN_CONFIDENCE', 0.7),
+        'extraction_max_output_tokens' => (int) env('PROJECT_FACT_EXTRACTION_MAX_OUTPUT_TOKENS', 4096),
+        'extraction_timeout' => (int) env('PROJECT_FACT_EXTRACTION_TIMEOUT', 60),
+    ],
+
 ];

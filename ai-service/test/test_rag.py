@@ -143,6 +143,61 @@ def test_delete_document_vectors(mock_vector_store: MagicMock):
     mock_vector_store.delete_document.assert_called_once()
 
 
+@patch("routes.vector_store")
+def test_list_document_chunks_returns_scoped_chunks(mock_vector_store: MagicMock):
+    mock_vector_store.list_document_chunks.return_value = [
+        {
+            "chunk_index": 0,
+            "source_filename": "architecture.pdf",
+            "content": "The backend framework is Laravel 13.",
+        }
+    ]
+
+    response = client.post(
+        "/documents/chunks",
+        headers=auth_headers(),
+        json={
+            "workspace_id": 1,
+            "customer_id": 2,
+            "deployment_id": 3,
+            "document_id": 4,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "chunks": [
+            {
+                "chunk_index": 0,
+                "source_filename": "architecture.pdf",
+                "content": "The backend framework is Laravel 13.",
+            }
+        ]
+    }
+    mock_vector_store.list_document_chunks.assert_called_once_with(
+        workspace_id=1,
+        customer_id=2,
+        deployment_id=3,
+        document_id=4,
+    )
+
+
+@patch("routes.vector_store")
+def test_list_document_chunks_rejects_missing_token(mock_vector_store: MagicMock):
+    response = client.post(
+        "/documents/chunks",
+        json={
+            "workspace_id": 1,
+            "customer_id": 2,
+            "deployment_id": 3,
+            "document_id": 4,
+        },
+    )
+
+    assert response.status_code == 401
+    mock_vector_store.list_document_chunks.assert_not_called()
+
+
 def test_config_loads_openai_api_key_from_root_env():
     from config import ROOT_ENV_PATH, SERVICE_ENV_PATH, settings
 

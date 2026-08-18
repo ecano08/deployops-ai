@@ -115,6 +115,30 @@ function incidentsPath(Workspace $workspace, Customer $customer, Deployment $dep
     return '/api/workspaces/'.$workspace->id.'/customers/'.$customer->id.'/deployments/'.$deployment->id.'/incidents';
 }
 
+function openAiIncompleteToolCallResponse(
+    string $name,
+    string $arguments = '{',
+    string $reason = 'max_output_tokens',
+    string $responseId = 'resp_incomplete',
+    string $callId = 'call_123',
+): array {
+    return [
+        'id' => $responseId,
+        'status' => 'incomplete',
+        'incomplete_details' => [
+            'reason' => $reason,
+        ],
+        'output' => [
+            [
+                'type' => 'function_call',
+                'call_id' => $callId,
+                'name' => $name,
+                'arguments' => $arguments,
+            ],
+        ],
+    ];
+}
+
 function openAiToolCallResponse(string $name, string $arguments = '{}', string $responseId = 'resp_tool', string $callId = 'call_123'): array
 {
     return [

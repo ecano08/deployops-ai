@@ -24,6 +24,11 @@ import type {
   KnowledgeDocumentLibraryQuery,
   KnowledgeDocumentMatchCandidateListResponse,
   KnowledgeDocumentResponse,
+  ProjectFactExtractionResponse,
+  ProjectFactListQuery,
+  ProjectFactListResponse,
+  ProjectFactBulkResponse,
+  ProjectFactResponse,
   UpdateIntegrationPayload,
   UserResponse,
   WorkspaceListResponse,
@@ -775,5 +780,148 @@ export function archiveKnowledgeDocument(
   return request<KnowledgeDocumentResponse>(
     `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/knowledge-documents/${documentId}/archive`,
     { method: 'POST' },
+  )
+}
+
+export function fetchProjectFacts(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+  query: ProjectFactListQuery = {},
+) {
+  const params = new URLSearchParams()
+
+  Object.entries(query).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      params.set(key, String(value))
+    }
+  })
+
+  const queryString = params.toString()
+  const suffix = queryString ? `?${queryString}` : ''
+
+  return request<ProjectFactListResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/project-facts${suffix}`,
+  )
+}
+
+export function createProjectFact(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+  payload: {
+    category: string
+    key: string
+    value: string
+    source_document_id?: number | null
+    source_reference?: string | null
+    confidence?: number | null
+  },
+) {
+  return request<ProjectFactResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/project-facts`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  )
+}
+
+export function updateProjectFact(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+  factId: number,
+  payload: {
+    category?: string
+    key?: string
+    value?: string
+    source_reference?: string | null
+    confidence?: number | null
+  },
+) {
+  return request<ProjectFactResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/project-facts/${factId}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    },
+  )
+}
+
+export function verifyProjectFact(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+  factId: number,
+) {
+  return request<ProjectFactResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/project-facts/${factId}/verify`,
+    { method: 'POST' },
+  )
+}
+
+export function rejectProjectFact(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+  factId: number,
+) {
+  return request<ProjectFactResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/project-facts/${factId}/reject`,
+    { method: 'POST' },
+  )
+}
+
+export function bulkVerifyProjectFacts(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+  ids: number[],
+) {
+  return request<ProjectFactBulkResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/project-facts/bulk-verify`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    },
+  )
+}
+
+export function bulkRejectProjectFacts(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+  payload: { ids: number[] } | { source_document_id: number; source_revision: number },
+) {
+  return request<ProjectFactBulkResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/project-facts/bulk-reject`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  )
+}
+
+export function extractProjectFacts(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+  documentId: number,
+) {
+  return request<ProjectFactExtractionResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/knowledge-documents/${documentId}/extract-facts`,
+    { method: 'POST' },
+  )
+}
+
+export function fetchProjectFactExtraction(
+  workspaceId: number,
+  customerId: number,
+  deploymentId: number,
+  extractionId: number,
+) {
+  return request<ProjectFactExtractionResponse>(
+    `/api/workspaces/${workspaceId}/customers/${customerId}/deployments/${deploymentId}/project-fact-extractions/${extractionId}`,
   )
 }

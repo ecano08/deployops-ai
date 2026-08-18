@@ -545,3 +545,105 @@ export type KnowledgeDocumentMatchCandidate = {
 export type KnowledgeDocumentMatchCandidateListResponse = {
   data: KnowledgeDocumentMatchCandidate[]
 }
+
+export type ProjectFactStatus = 'proposed' | 'verified' | 'rejected' | 'superseded'
+
+export type ProjectFactUser = {
+  id: number
+  name: string
+  email: string
+}
+
+export type ProjectFactSourceDocument = {
+  id: number
+  title: string
+  revision_number: number
+  original_filename: string
+}
+
+export type ProjectFact = {
+  id: number
+  workspace_id: number
+  customer_id: number
+  deployment_id: number
+  category: string
+  key: string
+  value: string
+  source_document_id: number | null
+  source_revision: number | null
+  source_reference: string | null
+  confidence: number | null
+  status: ProjectFactStatus
+  verified_at: string | null
+  verified_by: ProjectFactUser | null
+  superseded_by_id: number | null
+  created_by: ProjectFactUser | null
+  source_document: ProjectFactSourceDocument | null
+  created_at: string
+  updated_at: string
+}
+
+export type ProjectFactStats = {
+  proposed_count: number
+  verified_count: number
+  rejected_count: number
+}
+
+export type ProjectFactFilterSourceDocument = {
+  id: number
+  title: string
+  revision_number: number
+}
+
+export type ProjectFactFilterOptions = {
+  categories: string[]
+  source_documents: ProjectFactFilterSourceDocument[]
+}
+
+export type ProjectFactListQuery = {
+  status?: ProjectFactStatus
+  search?: string
+  category?: string
+  source_document_id?: number
+  page?: number
+  per_page?: number
+}
+
+export type ProjectFactListResponse = {
+  data: ProjectFact[]
+  meta: PaginationMeta
+  stats: ProjectFactStats
+  filter_options?: ProjectFactFilterOptions
+}
+
+export type ProjectFactResponse = {
+  data: ProjectFact
+}
+
+export type ProjectFactBulkResponse = {
+  data: ProjectFact[]
+  stats: ProjectFactStats
+  processed_count: number
+}
+
+export type ProjectFactExtractionStatus = 'pending' | 'processing' | 'completed' | 'failed'
+
+export type ProjectFactExtraction = {
+  id: number
+  workspace_id: number
+  customer_id: number
+  deployment_id: number
+  source_document_id: number
+  source_revision: number
+  status: ProjectFactExtractionStatus
+  proposed_count: number
+  error_message: string | null
+  started_at: string | null
+  completed_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type ProjectFactExtractionResponse = {
+  data: ProjectFactExtraction
+}

@@ -22,6 +22,23 @@ class DeleteDocumentRequest(BaseModel):
     document_id: int
 
 
+class ListDocumentChunksRequest(BaseModel):
+    workspace_id: int
+    customer_id: int
+    deployment_id: int
+    document_id: int
+
+
+class DocumentChunk(BaseModel):
+    chunk_index: int
+    source_filename: str
+    content: str
+
+
+class ListDocumentChunksResponse(BaseModel):
+    chunks: list[DocumentChunk]
+
+
 class SearchRequest(BaseModel):
     workspace_id: int
     customer_id: int

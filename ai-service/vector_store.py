@@ -124,6 +124,43 @@ class VectorStore:
                     (workspace_id, customer_id, deployment_id, document_id),
                 )
 
+    def list_document_chunks(
+        self,
+        *,
+        workspace_id: int,
+        customer_id: int,
+        deployment_id: int,
+        document_id: int,
+    ) -> list[dict[str, Any]]:
+        with self._connection_context() as connection:
+            with connection.cursor(row_factory=dict_row) as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        chunk_index,
+                        source_filename,
+                        content
+                    FROM knowledge_chunks
+                    WHERE workspace_id = %s
+                      AND customer_id = %s
+                      AND deployment_id = %s
+                      AND document_id = %s
+                    ORDER BY chunk_index ASC
+                    """,
+                    (workspace_id, customer_id, deployment_id, document_id),
+                )
+
+                rows = cursor.fetchall()
+
+        return [
+            {
+                "chunk_index": int(row["chunk_index"]),
+                "source_filename": str(row["source_filename"]),
+                "content": str(row["content"]),
+            }
+            for row in rows
+        ]
+
     def search(
         self,
         *,

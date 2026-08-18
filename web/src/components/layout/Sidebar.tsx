@@ -3,6 +3,7 @@ import {
   Activity,
   BookOpen,
   Bot,
+  Brain,
   CheckSquare,
   LayoutDashboard,
   Plug,
@@ -17,6 +18,7 @@ export type AppView =
   | 'integrations'
   | 'copilot'
   | 'knowledge'
+  | 'intelligence'
   | 'evals'
   | 'approvals'
   | 'observability'
@@ -33,6 +35,7 @@ const navItems: NavItem[] = [
   { id: 'integrations', label: 'Integrations', icon: Plug },
   { id: 'copilot', label: 'Copilot', icon: Bot },
   { id: 'knowledge', label: 'Documentation', icon: BookOpen },
+  { id: 'intelligence', label: 'Intelligence', icon: Brain },
   { id: 'evals', label: 'Evaluations', icon: Activity },
   { id: 'approvals', label: 'Approvals', icon: CheckSquare },
   { id: 'observability', label: 'Observability', icon: Radar },
