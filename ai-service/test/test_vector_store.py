@@ -85,5 +85,72 @@ def test_vector_store_blocks_cross_tenant_retrieval(vector_store: VectorStore, m
     assert [result["source_filename"] for result in tenant_b_results] == ["tenant-b.txt"]
 
 
+def test_vector_store_lists_document_chunks_in_order(vector_store: VectorStore):
+    embedding = [0.0] * 1536
+    embedding[0] = 1.0
+
+    vector_store.replace_document_chunks(
+        workspace_id=1,
+        customer_id=1,
+        deployment_id=1,
+        document_id=10,
+        source_filename="architecture.pdf",
+        chunks=["First chunk.", "Second chunk."],
+        embeddings=[embedding, embedding],
+    )
+
+    chunks = vector_store.list_document_chunks(
+        workspace_id=1,
+        customer_id=1,
+        deployment_id=1,
+        document_id=10,
+    )
+
+    assert [chunk["chunk_index"] for chunk in chunks] == [0, 1]
+    assert chunks[0]["content"] == "First chunk."
+    assert chunks[1]["source_filename"] == "architecture.pdf"
+
+
+def test_vector_store_scopes_list_document_chunks_by_tenant(vector_store: VectorStore):
+    embedding = [0.0] * 1536
+    embedding[0] = 1.0
+
+    vector_store.replace_document_chunks(
+        workspace_id=1,
+        customer_id=1,
+        deployment_id=1,
+        document_id=10,
+        source_filename="tenant-a.pdf",
+        chunks=["Tenant A content."],
+        embeddings=[embedding],
+    )
+
+    vector_store.replace_document_chunks(
+        workspace_id=2,
+        customer_id=2,
+        deployment_id=2,
+        document_id=20,
+        source_filename="tenant-b.pdf",
+        chunks=["Tenant B content."],
+        embeddings=[embedding],
+    )
+
+    tenant_a_chunks = vector_store.list_document_chunks(
+        workspace_id=1,
+        customer_id=1,
+        deployment_id=1,
+        document_id=10,
+    )
+    tenant_b_chunks = vector_store.list_document_chunks(
+        workspace_id=2,
+        customer_id=2,
+        deployment_id=2,
+        document_id=20,
+    )
+
+    assert tenant_a_chunks[0]["source_filename"] == "tenant-a.pdf"
+    assert tenant_b_chunks[0]["source_filename"] == "tenant-b.pdf"
+
+
 def test_internal_token_header_name_is_stable():
     assert INTERNAL_TOKEN_HEADER == "X-AI-Service-Token"

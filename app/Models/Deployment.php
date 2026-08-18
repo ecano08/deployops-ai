@@ -99,4 +99,20 @@ class Deployment extends Model
     {
         return $this->hasMany(Incident::class);
     }
+
+    /**
+     * @return HasMany<ProjectFact, $this>
+     */
+    public function projectFacts(): HasMany
+    {
+        return $this->hasMany(ProjectFact::class);
+    }
+
+    /**
+     * @return HasMany<ProjectFactExtraction, $this>
+     */
+    public function projectFactExtractions(): HasMany
+    {
+        return $this->hasMany(ProjectFactExtraction::class);
+    }
 }

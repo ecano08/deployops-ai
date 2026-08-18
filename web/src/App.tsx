@@ -62,6 +62,7 @@ import { DashboardPage } from './pages/DashboardPage'
 import { EvalsPage } from './pages/EvalsPage'
 import { IntegrationsPage } from './pages/IntegrationsPage'
 import { KnowledgePage } from './pages/KnowledgePage'
+import { ProjectIntelligencePage } from './pages/ProjectIntelligencePage'
 import { ObservabilityPage } from './pages/ObservabilityPage'
 import { TeamPage } from './pages/TeamPage'
 import {
@@ -1732,6 +1733,14 @@ function App() {
             onActivate={handleActivateKnowledge}
             onArchive={handleArchiveKnowledge}
             onDelete={handleDeleteKnowledge}
+          />
+        )
+      case 'intelligence':
+        return (
+          <ProjectIntelligencePage
+            workspace={selectedWorkspace}
+            customer={selectedCustomer}
+            deployment={selectedDeployment}
           />
         )
       case 'evals':

@@ -68,6 +68,10 @@ const viewMeta: Record<AppView, { title: string; description: string }> = {
     title: 'Project Documentation',
     description: 'Upload and govern engineering documents indexed for copilot when active and ready.',
   },
+  intelligence: {
+    title: 'Project Intelligence',
+    description: 'Review structured facts extracted from documentation with provenance and human verification.',
+  },
   evals: {
     title: 'AI Evaluations',
     description: 'Run quality benchmarks and review pass rates against expected copilot behavior.',

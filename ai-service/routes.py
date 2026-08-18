@@ -7,6 +7,8 @@ from document_parser import extract_text_from_base64
 from embeddings import EmbeddingClient
 from schemas import (
     DeleteDocumentRequest,
+    ListDocumentChunksRequest,
+    ListDocumentChunksResponse,
     ProcessDocumentRequest,
     ProcessDocumentResponse,
     SearchRequest,
@@ -67,6 +69,18 @@ def delete_document(request: DeleteDocumentRequest) -> dict[str, str]:
     )
 
     return {"status": "deleted"}
+
+
+@router.post("/documents/chunks", response_model=ListDocumentChunksResponse)
+def list_document_chunks(request: ListDocumentChunksRequest) -> ListDocumentChunksResponse:
+    chunks = vector_store.list_document_chunks(
+        workspace_id=request.workspace_id,
+        customer_id=request.customer_id,
+        deployment_id=request.deployment_id,
+        document_id=request.document_id,
+    )
+
+    return ListDocumentChunksResponse(chunks=chunks)
 
 
 @router.post("/search", response_model=SearchResponse)

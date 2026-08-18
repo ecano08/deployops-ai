@@ -102,6 +102,38 @@ class AiServiceClient
         }
     }
 
+    /**
+     * @return list<array{
+     *     chunk_index: int,
+     *     source_filename: string,
+     *     content: string
+     * }>
+     */
+    public function listDocumentChunks(KnowledgeDocument $document): array
+    {
+        $response = $this->client()
+            ->post('/documents/chunks', [
+                'workspace_id' => $document->workspace_id,
+                'customer_id' => $document->customer_id,
+                'deployment_id' => $document->deployment_id,
+                'document_id' => $document->id,
+            ])
+            ->throw();
+
+        /** @var array{chunks?: array<int, array<string, mixed>>} $payload */
+        $payload = $response->json();
+        $chunks = $payload['chunks'] ?? [];
+
+        return array_values(array_map(
+            static fn (array $chunk): array => [
+                'chunk_index' => (int) $chunk['chunk_index'],
+                'source_filename' => (string) $chunk['source_filename'],
+                'content' => (string) $chunk['content'],
+            ],
+            $chunks,
+        ));
+    }
+
     private function client(): PendingRequest
     {
         $timeout = (int) config('services.ai_service.timeout', 60);

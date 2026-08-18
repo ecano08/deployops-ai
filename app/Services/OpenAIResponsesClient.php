@@ -17,12 +17,14 @@ class OpenAIResponsesClient
     /**
      * @param  string|array<int, mixed>  $input
      * @param  array<int, array<string, mixed>>  $tools
+     * @param  array{max_output_tokens?: int, timeout?: int, tool_choice?: array<string, mixed>}  $options
      * @return array<string, mixed>
      */
     public function create(
         string $instructions,
         string|array $input,
         array $tools,
+        array $options = [],
     ): array {
         $apiKey = config('services.openai.api_key');
 
@@ -35,12 +37,16 @@ class OpenAIResponsesClient
             'instructions' => $instructions,
             'input' => $input,
             'tools' => $tools,
-            'max_output_tokens' => (int) config('services.openai.max_output_tokens'),
+            'max_output_tokens' => (int) ($options['max_output_tokens'] ?? config('services.openai.max_output_tokens')),
             'store' => false,
         ];
 
+        if (isset($options['tool_choice']) && is_array($options['tool_choice'])) {
+            $payload['tool_choice'] = $options['tool_choice'];
+        }
+
         try {
-            $response = Http::timeout((int) config('services.openai.timeout'))
+            $response = Http::timeout((int) ($options['timeout'] ?? config('services.openai.timeout')))
                 ->connectTimeout((int) config('services.openai.connect_timeout'))
                 ->withToken($apiKey)
                 ->acceptJson()
@@ -133,10 +139,17 @@ class OpenAIResponsesClient
                 continue;
             }
 
+            if (is_array($arguments)) {
+                $encoded = json_encode($arguments);
+                $arguments = is_string($encoded) ? $encoded : '{}';
+            } elseif (! is_string($arguments) || $arguments === '') {
+                $arguments = '{}';
+            }
+
             $calls[] = [
                 'call_id' => $callId,
                 'name' => $name,
-                'arguments' => is_string($arguments) ? $arguments : '{}',
+                'arguments' => $arguments,
             ];
         }
 
