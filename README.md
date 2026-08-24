@@ -1,8 +1,43 @@
 # DeployOps AI
 
-A production-grade **Forward Deployed Engineering (FDE) / Applied AI** platform for managing customer deployments, secure integrations, AI copilots, knowledge bases, evaluations, and observability — all within multi-tenant workspaces with role-based access control.
+DeployOps AI is a production-oriented **Applied AI / Forward Deployed Engineering (FDE)** platform that explores how AI can help software teams understand complex systems, work with project knowledge, investigate problems, and propose controlled actions while keeping people in the decision loop.
+
+The project brings together full-stack engineering, RAG, tool calling, evaluations, observability, secure integrations, and human-in-the-loop workflows in an end-to-end system designed to explore AI beyond the chatbot interface.
+
+> **Active Development** — Foundation milestones (PR1–PR10) are complete, but DeployOps AI is still evolving through incremental PRs focused on project intelligence, grounded context, reliability, and portfolio polish. See [PR Roadmap](#pr-roadmap).
 
 > **Portfolio demo:** Sign in with `demo@deployops.ai` / `password` after running demo seed (see [Development Commands](#development-commands)).
+
+## Why I Built This
+
+DeployOps AI started with a question I kept coming back to while working on real software projects:
+
+**What if AI could help engineers understand a system before helping them change it?**
+
+In my experience, writing the code is often not the hardest part. The difficult part is understanding the context around a change — why something works the way it does, which business rules matter, what other parts of the system could be affected, and what previous decisions led to the current implementation.
+
+As AI coding tools became more capable, I became curious about what could come next. I was not interested in building another chatbot or adding AI simply to say a product had AI. I wanted to explore whether AI could become useful in the part of engineering that requires context, judgment, and responsibility.
+
+That curiosity became **DeployOps AI**.
+
+I chose to build the problem end to end instead of treating it as an isolated AI experiment. As the project evolved, each stage pushed me to think beyond the model itself: how project knowledge is gathered, how answers are grounded, how actions are controlled, how failures become visible, how quality is measured, and when a human should make the final decision.
+
+The biggest lesson has been that making AI useful in real software systems is not only about choosing a better model or writing better prompts. The surrounding engineering matters just as much: **context, reliability, traceability, security, evaluation, observability, and human judgment**.
+
+DeployOps AI is still evolving, and that is part of the purpose of the project. It represents not only what I have built, but also how my thinking about AI-assisted engineering continues to evolve as I test ideas, find limitations, and improve the system.
+
+The question I want to keep exploring is simple:
+
+**How can we make AI genuinely useful to software teams without giving up the engineering discipline that makes production systems reliable?**
+
+## What This Project Demonstrates
+
+- **End-to-end ownership** — Taking an idea from problem framing and product workflows through backend, frontend, AI services, infrastructure, testing, and CI.
+- **Applied AI beyond the chatbot** — Combining scoped RAG, strict tool calling, evaluations, and project context to support useful engineering workflows.
+- **Human-centered AI design** — Keeping sensitive actions behind explicit human approval instead of treating autonomy as the goal by default.
+- **Production engineering** — Building a multi-service system with Laravel, FastAPI, React, async queues, health checks, graceful degradation, and cross-stack CI.
+- **Security and reliability mindset** — Designing around tenant isolation, authorization, protected secrets, traceability, observability, and measurable AI behavior.
+- **Continuous learning** — Using the project to test ideas, identify limitations, and improve how AI, software architecture, and human decision-making work together.
 
 ## Use Case
 
@@ -292,7 +327,9 @@ Suggested captures after seeding:
 
 ## PR Roadmap
 
-All planned PRs are complete. Subsequent frontend management, UX, and QA work (CRUD dialogs, invitation flows, live refresh, RBAC-aware UI polish) shipped as product polish on top of this sequence.
+### Foundation milestones (PR1–PR10) — Complete
+
+These ten PRs delivered the core platform: auth and tenancy through copilot, RAG, evaluations, human-in-the-loop controls, observability, and initial portfolio polish.
 
 | PR | Focus | Status |
 | --- | --- | --- |
@@ -306,6 +343,21 @@ All planned PRs are complete. Subsequent frontend management, UX, and QA work (C
 | PR8 | AI Evaluations & HITL | Done |
 | PR9 | Observability & Incidents | Done |
 | PR10 | Production & Portfolio Polish | Done |
+
+### Active development (post-foundation)
+
+Work continues beyond the foundation sequence. Incremental PRs ship additional capabilities; some areas are still in progress.
+
+| Area | Status |
+| --- | --- |
+| Frontend management workflows & HITL UX | Shipped |
+| Governed project documentation | Shipped |
+| Project intelligence (structured facts + human verification) | Shipped |
+| Hybrid grounded context builder | Shipped |
+| Portfolio presentation (screenshots, extended docs) | In progress |
+| Additional incremental PRs | Planned |
+
+The [Features](#features) section documents the foundation platform. Post-foundation work continues incrementally and is reflected in the roadmap and commit history.
 
 ## CI
 
